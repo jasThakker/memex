@@ -21,11 +21,21 @@ _SPAN = re.compile(r"`([^`\n]+)`")
 _DOTTED = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
 _NAME = re.compile(r"(?<![\w.])" + _DOTTED.pattern)
 _CAMEL = re.compile(r"[a-z][A-Z]|[A-Z]{2}[a-z]")
+_ACRONYM_PLURAL = re.compile(r"[A-Z]{2,}s")  # APIs, URLs, PRs
+# Last segments that make a dotted word a file name or a host, not a code name.
+_FILE_SUFFIXES = frozenset(
+    "py pyi md rst txt toml cfg ini json yaml yml lock html css js ts sh com org io net".split()  # noqa: SIM905
+)
 
+_QUOTE_MARKER = re.compile(r"^\s*(?:>\s?)+")
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z`])")
+_TABLE_SEPARATOR = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
+# A break after . ! or ? when the next sentence starts with a capital or a code span,
+# possibly behind emphasis, a link bracket, a quote or a parenthesis.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[*_\[\"'(]*[A-Z`])")
 _ABBREVIATIONS = ("e.g.", "i.e.")
 
+_EMPHASIS = re.compile(r"\*+|(?<!\w)_+|_+(?!\w)")
 _APOSTROPHE = "['’]"
 _NEGATED = re.compile(
     rf"\b(?:don{_APOSTROPHE}t|do not|no) need to\b|\bnot (?:required|necessary)\b", re.I
@@ -39,38 +49,52 @@ _ENCOURAGES = re.compile(r"\b(?:must|should|always|prefer)\b", re.I)
 
 @dataclass(frozen=True)
 class Sentence:
-    text: str  # whitespace collapsed, list marker dropped
+    text: str  # whitespace collapsed, list and quote markers dropped
     start_line: int
     end_line: int
 
 
 def code_tokens(description: str) -> list[str]:
-    """Distinct code-shaped names in order of appearance: identifiers in backtick spans (a
-    trailing `()` dropped), and outside them dotted names whose segments are at least two
-    characters long, names with an underscore, and CamelCase names."""
+    """Distinct code-shaped names in order of appearance: a backtick span holding a dotted
+    name (a trailing `()` dropped), and elsewhere, also inside other spans, dotted names whose
+    segments are at least two characters long, names with an underscore, and CamelCase names.
+    File names, hosts (`main.py`, `github.com`) and acronym plurals (`APIs`) are skipped."""
     found: list[tuple[int, str]] = []
+    masked = description
     for match in _SPAN.finditer(description):
         name = match.group(1).strip().removesuffix("()")
         if _DOTTED.fullmatch(name):
             found.append((match.start(), name))
-    masked = _SPAN.sub(lambda match: " " * len(match.group()), description)
+            masked = masked[: match.start()] + " " * len(match.group()) + masked[match.end() :]
     for match in _NAME.finditer(masked):
         name = match.group()
         if "." in name:
-            if all(len(segment) >= 2 for segment in name.split(".")):
+            segments = name.split(".")
+            if all(len(s) >= 2 for s in segments) and segments[-1] not in _FILE_SUFFIXES:
                 found.append((match.start(), name))
-        elif "_" in name or _CAMEL.search(name):
+        elif not _ACRONYM_PLURAL.fullmatch(name) and ("_" in name or _CAMEL.search(name)):
             found.append((match.start(), name))
     return list(dict.fromkeys(name for _, name in sorted(found)))
 
 
+def section_sentences(text: str, end_line: int) -> list[Sentence]:
+    """The sentences of a stored doc section body. `text` is trimmed of outer blank lines
+    and ends on `end_line`, so its first line is `end_line` minus its line breaks."""
+    if not text:
+        return []
+    return sentences(text, first_line=end_line - text.count("\n"))
+
+
 def sentences(text: str, first_line: int) -> list[Sentence]:
     """The sentences of a section body whose first line is `first_line`. Fenced code is
-    skipped; a blank line, a list item or a table row starts a new unit; a unit is split
-    after `.`, `!` or `?` followed by a capital letter or a backtick, except after `e.g.`
-    and `i.e.`."""
+    skipped and blockquote markers dropped. A blank line, a list item or a table row starts
+    a new unit (a table is found by its separator row, with or without outer pipes, and
+    ends at a blank line or a list item). A unit
+    is split after `.`, `!` or `?` followed by a sentence start (see _SENTENCE_BREAK),
+    except after `e.g.` and `i.e.`."""
     units: list[list[tuple[int, str]]] = []
     current: list[tuple[int, str]] = []
+    in_table = False
 
     def close() -> None:
         nonlocal current
@@ -78,18 +102,27 @@ def sentences(text: str, first_line: int) -> list[Sentence]:
             units.append(current)
         current = []
 
-    for offset, line in enumerate(outside_fences(text).split("\n")):
+    for offset, raw in enumerate(outside_fences(text).split("\n")):
         number = first_line + offset
+        line = _QUOTE_MARKER.sub("", raw)
         stripped = line.strip()
         if not stripped:
             close()
-        elif stripped.startswith("|"):
+            in_table = False
+        elif _TABLE_SEPARATOR.match(line):
+            if current:  # the header row, read as a paragraph line until now
+                header = current.pop()
+                close()
+                units.append([header])
+            in_table = True
+        elif item := _LIST_ITEM.match(line):  # also ends a table
             close()
-            if re.search(r"\w", stripped):  # a separator row has no words
-                units.append([(number, stripped)])
-        elif item := _LIST_ITEM.match(line):
-            close()
+            in_table = False
             current = [(number, item.group(1).strip())]
+        elif in_table or stripped.startswith("|"):
+            close()
+            if re.search(r"\w", stripped):
+                units.append([(number, stripped)])
         else:
             current.append((number, stripped))
     close()
@@ -128,11 +161,22 @@ def _split(unit: list[tuple[int, str]]) -> list[Sentence]:
 def stance(sentence: str) -> Stance:
     """`related` for a negated requirement ("you don't need to"), else `forbids` for never,
     do not, must not, should not or avoid, else `encourages` for must, should, always or
-    prefer, else `related`. Whole words, ignoring case; forbids wins over encourages."""
-    if _NEGATED.search(sentence):
-        return "related"
-    if _FORBIDS.search(sentence):
-        return "forbids"
-    if _ENCOURAGES.search(sentence):
-        return "encourages"
-    return "related"
+    prefer, else `related`. Whole words, ignoring case and emphasis markers (`must **not**`);
+    forbids wins over encourages."""
+    return _decide(sentence)[0]
+
+
+def modal_word(sentence: str) -> str:
+    """The words that decided the sentence's stance, or "" when it is `related`."""
+    return _decide(sentence)[1]
+
+
+def _decide(sentence: str) -> tuple[Stance, str]:
+    plain = _EMPHASIS.sub("", sentence)
+    if _NEGATED.search(plain):
+        return "related", ""
+    if match := _FORBIDS.search(plain):
+        return "forbids", match.group()
+    if match := _ENCOURAGES.search(plain):
+        return "encourages", match.group()
+    return "related", ""

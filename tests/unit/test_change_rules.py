@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from memex.query.rules import Sentence, code_tokens, sentences, stance
+from memex.ingest.docs.chunker import chunk
+from memex.query.rules import Sentence, code_tokens, section_sentences, sentences, stance
 
 DOCS = Path(__file__).resolve().parents[1] / "fixtures" / "docs"
 
@@ -34,10 +35,16 @@ def test_code_tokens_are_backtick_spans_dotted_snake_and_camel_names_in_order() 
         "Make the services faster and simpler.",  # plain words, capitalized or not
         "Use i.e. and e.g. freely. OK?",  # abbreviations are not dotted names
         "Run `uv run pytest` and edit `app/routes/`.",  # spans that are not identifiers
+        # file names, hosts and acronym plurals are not code names
+        "Update the URLs in README.md, pyproject.toml and main.py for the APIs on github.com.",
     ],
 )
 def test_plain_text_has_no_code_tokens(description: str) -> None:
     assert code_tokens(description) == []
+
+
+def test_a_span_holding_a_call_yields_the_name_inside_it() -> None:
+    assert code_tokens("Change `ItemService.create(data)` to validate.") == ["ItemService.create"]
 
 
 def test_a_section_body_is_split_into_sentences_with_their_lines() -> None:
@@ -81,6 +88,52 @@ def test_a_sentence_may_start_with_a_code_span() -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (  # a sentence may start with emphasis, a link or a quote
+            'Use the service layer. **Never** call repos. [Docs](d.md) say so. "Avoid" it.',
+            [
+                Sentence("Use the service layer.", 1, 1),
+                Sentence("**Never** call repos.", 1, 1),
+                Sentence("[Docs](d.md) say so.", 1, 1),
+                Sentence('"Avoid" it.', 1, 1),
+            ],
+        ),
+        (  # blockquote markers are dropped
+            "> Prefer X.\n> Never Y.",
+            [Sentence("Prefer X.", 1, 1), Sentence("Never Y.", 2, 2)],
+        ),
+        (  # a table without leading pipes: one sentence per row, no separator row
+            "Rule | Note\n--- | ---\nNever X | y\nAlways Z | w",
+            [
+                Sentence("Rule | Note", 1, 1),
+                Sentence("Never X | y", 3, 3),
+                Sentence("Always Z | w", 4, 4),
+            ],
+        ),
+        (  # a list item that wraps over two lines is one sentence
+            "- Never call repos\n  from routes.\n- Next item.",
+            [Sentence("Never call repos from routes.", 1, 2), Sentence("Next item.", 3, 3)],
+        ),
+    ],
+)
+def test_more_sentence_shapes(text: str, expected: list[Sentence]) -> None:
+    assert sentences(text, first_line=1) == expected
+
+
+def test_section_lines_come_from_the_chunker_output() -> None:
+    # a preamble, a setext heading and CRLF line ends
+    doc = "Intro line. Never skip this.\r\n\r\nSetext Title\r\n============\r\n\r\n"
+    doc += "Always run the tests.\r\nAvoid globals.\r\n"
+    found = [section_sentences(c.text, c.end_line) for c in chunk(doc)]
+    assert found == [
+        [Sentence("Intro line.", 1, 1), Sentence("Never skip this.", 1, 1)],
+        [Sentence("Always run the tests.", 6, 6), Sentence("Avoid globals.", 7, 7)],
+    ]
+    assert section_sentences("", 5) == []
+
+
+@pytest.mark.parametrize(
     ("sentence", "expected"),
     [
         ("Never edit generated files by hand.", "forbids"),
@@ -91,6 +144,11 @@ def test_a_sentence_may_start_with_a_code_span() -> None:
         ("You shouldn't import routes here.", "forbids"),
         ("Don't call repos from routes.", "forbids"),
         ("Avoid global state.", "forbids"),
+        ("You must **not** call `get_one` directly.", "forbids"),  # emphasis inside
+        ("Do **not** edit locales.", "forbids"),
+        ("Do _not_ edit locales.", "forbids"),
+        ("Don\u2019t call repos from routes.", "forbids"),  # curly apostrophe
+        ("You don\u2019t need to restart.", "related"),
         ("Services should call repositories and must not open sessions.", "forbids"),
         ("All code must pass type checking.", "encourages"),
         ("Tests should cover new code.", "encourages"),

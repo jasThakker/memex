@@ -371,6 +371,11 @@ Stated openly:
   - `*args and **kwargs` loses markers, and backslash escapes and entities are kept as written.
   - A heading with no plain text gets an empty anchor, or ` (2)` after a preamble.
 - Guideline stance comes from modal-verb rules, not semantic understanding.
+- check_change reads doc text by pattern, not by parsing:
+  - HTML comments and indented code are read as prose, so a rule inside them is quoted.
+  - When a section's mention sits only in a fence, its sentences with a stance are quoted, as for a heading-only mention.
+  - Search matching counts any shared word of four letters or more outside a short stopword list, so generic words (`change`, `code`, `file`) can pick a sentence.
+  - Brand and product names in a description (`OAuth`, `FastAPI`) look like code names and are listed as unresolved.
 
 ## 14. Evaluation
 

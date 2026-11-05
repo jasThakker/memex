@@ -164,7 +164,7 @@ DOCS = [
             "Every service must inherit from `BaseService`.",
             "Never construct",  # one sentence over two lines
             "`BaseService` directly; use a subclass.",
-            "You may call `BaseService.__init__` from tests.",  # past 2 per section
+            "You may call `BaseService.__init__` from tests.",  # names the method, not the class
         ],
         [BASE],
     ),
@@ -217,9 +217,9 @@ DOCS = [
 ]
 
 
-def with_docs() -> GraphBatch:
+def with_docs(docs: list[tuple[str, str, int, list[str], list[str]]] = DOCS) -> GraphBatch:
     nodes, edges = [], []
-    for path, heading_path, start, body, mentioned in DOCS:
+    for path, heading_path, start, body, mentioned in docs:
         node_id = doc_id("layered_app", path, heading_path)
         nodes.append(
             DocNode(
@@ -361,6 +361,11 @@ def test_a_sentence_found_both_ways_is_listed_once_as_a_mention(
     assert len(cited) == len(set(cited))
     construct = [g for g in result.guidelines if g.quote.startswith("Never construct")]
     assert [g.matched_on for g in construct] == ["mention"]
+    # search alone finds it too, so the mention really won the merge
+    alone = check(documented, "Construct `BaseService` directly in scripts.", ["NoSuchThing"])
+    assert [g.matched_on for g in alone.guidelines if g.quote.startswith("Never construct")] == [
+        "search"
+    ]
     # every mention before every search hit
     kinds = [g.matched_on for g in result.guidelines]
     assert kinds == sorted(kinds)
@@ -375,16 +380,23 @@ def test_on_the_real_fixture_docs_a_rule_against_an_ambiguous_name_is_found_by_s
     result = check(driver, "Call `get_one` on a repository from a route.")
 
     assert [a.name for a in result.ambiguous] == ["get_one"]
-    assert (
+    layers = [g for g in result.guidelines if g.citation.heading_path == "Agent Guide > Layers"]
+    assert layers == [
+        searched(
+            "forbids",
+            "Routes in `app/routes/` call services, never repos directly.",
+            "AGENTS.md",
+            "Agent Guide > Layers",
+            7,
+        ),
         searched(
             "forbids",
             "Never call `get_one` on a repository from a route.",
             "AGENTS.md",
             "Agent Guide > Layers",
             9,
-        )
-        in result.guidelines
-    )
+        ),
+    ]
 
 
 def test_on_the_real_fixture_docs_a_mention_cites_its_line(driver: Driver) -> None:
@@ -393,7 +405,7 @@ def test_on_the_real_fixture_docs_a_mention_cites_its_line(driver: Driver) -> No
 
     result = check(driver, "Tidy it up.", ["BaseService"])
 
-    assert (
+    assert [g for g in result.guidelines if g.citation.path == "AGENTS.md"] == [
         mentioned(
             "related",
             "Services inherit from `BaseService` and get repositories from `AllRepositories`.",
@@ -401,5 +413,133 @@ def test_on_the_real_fixture_docs_a_mention_cites_its_line(driver: Driver) -> No
             "Agent Guide > Layers",
             (8, 8),
         )
-        in result.guidelines
-    )
+    ]
+
+
+# Reviewer run 1 cases, each in its own doc so the lists above stay as they are.
+LONG = ", ".join(["the repositories are passed in by the caller"] * 5)  # one sentence
+REVIEW_DOCS = [
+    (
+        "docs/oneline.md",
+        "One line",
+        1,
+        ["Never call `BaseService` directly. Use `BaseService` only via subclasses."],
+        [BASE],
+    ),
+    (
+        "docs/module.md",  # names the module that defines BaseService
+        "Module",
+        1,
+        ["Never import routes in app/_base/service.py."],
+        ["app._base.service"],
+    ),
+    (
+        "docs/repos.md",  # names the layer package of UserRepository
+        "Repos",
+        1,
+        ["Code in `app/repos/` must not commit."],
+        ["app.repos"],
+    ),
+    (
+        "docs/base.md",  # a package path without a trailing slash; a qualname as a prefix
+        "Base",
+        1,
+        ["Read app._base.service first.", "Never import routes in app/_base."],
+        ["app._base"],
+    ),
+    (
+        "docs/create.md",  # a short name used as an English word
+        "Create",
+        1,
+        ["Always create orders through the service.", "`OrderService.create` must validate."],
+        ["app.services.order_services.order_service.OrderService.create"],
+    ),
+    (
+        "docs/long.md",  # heading-only mention, long sentence
+        "Using BaseService well",
+        1,
+        [f"In short, {LONG}, so you must always pass them in."],
+        [BASE],
+    ),
+    ("docs/year.md", "Year", 1, ["Never ship in 2024."], []),
+]
+
+
+@pytest.fixture
+def reviewed(driver: Driver) -> Driver:
+    ensure_schema(driver)
+    replace_codebase(driver, with_docs(REVIEW_DOCS))
+    return driver
+
+
+def quotes(result: ChangeCheck, path: str) -> list[tuple[str, int]]:
+    return [(g.quote, g.citation.start_line) for g in result.guidelines if g.citation.path == path]
+
+
+@pytest.fixture
+def many(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(change, "MAX_GUIDELINES", 50)
+
+
+def test_two_sentences_on_one_line_are_both_cited(reviewed: Driver, many: None) -> None:
+    result = check(reviewed, "Tidy it up.", ["BaseService"])
+
+    assert quotes(result, "docs/oneline.md") == [
+        ("Never call `BaseService` directly.", 2),
+        ("Use `BaseService` only via subclasses.", 2),
+    ]
+
+
+def test_the_defining_module_and_the_layer_package_count_as_mentioned(
+    reviewed: Driver, many: None
+) -> None:
+    base = check(reviewed, "Tidy it up.", ["BaseService"])
+    repos = check(reviewed, "Tidy it up.", ["UserRepository"])
+
+    assert quotes(base, "docs/module.md") == [("Never import routes in app/_base/service.py.", 2)]
+    assert quotes(repos, "docs/repos.md") == [("Code in `app/repos/` must not commit.", 2)]
+
+
+def test_a_package_path_without_slash_names_it_and_a_qualname_prefix_does_not(
+    reviewed: Driver, many: None
+) -> None:
+    result = check(reviewed, "Tidy it up.", ["BaseService"])
+
+    assert quotes(result, "docs/base.md") == [("Never import routes in app/_base.", 3)]
+
+
+def test_a_bare_short_name_is_not_a_mention(reviewed: Driver, many: None) -> None:
+    result = check(reviewed, "Tidy it up.", ["BaseService"])
+
+    assert quotes(result, "docs/create.md") == [("`OrderService.create` must validate.", 3)]
+
+
+def test_a_heading_only_quote_is_centered_on_its_modal_word(reviewed: Driver, many: None) -> None:
+    result = check(reviewed, "Tidy it up.", ["BaseService"])
+
+    [(quote, _)] = quotes(result, "docs/long.md")
+    assert "must always pass them in" in quote
+    assert len(quote) <= 200
+
+
+def test_numbers_are_not_shared_words(reviewed: Driver) -> None:
+    result = check(reviewed, "Plan the 2024 release.")
+
+    assert quotes(result, "docs/year.md") == []
+
+
+def test_the_per_section_cap_holds_across_mention_and_search(
+    documented: Driver, many: None
+) -> None:
+    # mention picks lines 12 and 13; search alone would add 11 and 15
+    result = check(documented, "Services read data and call tests.", ["BaseService"])
+
+    assert [line for _, line in quotes(result, "docs/services.md")] == [12, 13]
+    assert result.truncated is True  # the cap cut lines 11 and 15
+
+
+def test_explicit_symbols_are_stripped_and_empty_ones_skipped(indexed: Driver) -> None:
+    result = check(indexed, "Tidy it up.", ["get_one", " get_one ", "", "BaseService"])
+
+    assert [a.name for a in result.ambiguous] == ["get_one"]
+    assert resolved(result) == [BASE]
