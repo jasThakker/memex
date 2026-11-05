@@ -48,4 +48,15 @@ Template:
 
 **Decisions / ADRs:** ADR-001 (schema freeze) planned for Phase 3, ADR-002 (no LLM in check_change) for Phase 6.
 
+**Questions I asked along the way:** what GraphBatch is, what an ADR is, who operates the graph, what layers and domains are, what the fixture is, why `/clear` between phases, what a persistent Neo4j volume is. Answered in chat; not added to DESIGN.md.
+
+**Handoff audit before `/clear`:** Claude checked the conversation against the docs and found things that existed only in chat: the workflow rationale table, the phase-start reading rule, the branch-per-phase convention and the Phase 1 slice list. Added `docs/workflow.md`, CLAUDE.md workflow lines and this entry's "Next" section. Claude also tried to add a glossary, an agent-usage walkthrough (with a Mealie example) and a Neo4j volume note to DESIGN.md; I rejected those: DESIGN.md stays a general design spec, not an explainer, and gets no benchmark-flavored additions.
+
+**Layer and domain labels, revisited:** I asked whether layers and domains were Mealie-specific. Decision: keep them as designed. They come from folder names by default for any repo, and repo-specific rules exist only in `memex.toml`. Rejected alternatives: renaming them to neutral terms, making them opt-in, or removing them.
+
 **Numbers:** 0.5 h estimated.
+
+**Next:**
+- `phase-0-workflow` merged into `main` with --no-ff; Phase 1 starts by creating `phase-1-scaffold` from `main`.
+- Phase 1 slices: (1) `pyproject.toml`, `.python-version` (3.14), empty `memex/` package, so the lint hook goes live; (2) `docker-compose.yml` with Neo4j 5, healthcheck, persistent volume; (3) `memex.toml` (mealie, httpx, memex) and `memex/config.py`, test-first; (4) guardrail test banning benchmark names in `memex/`; (5) `scripts/fetch_codebases.py` with commit check, `vendor/` gitignored; (6) Claude gives the exact Explore prompt to map Mealie and draft 12 eval questions, which the user verifies by hand before they go into `eval/questions.yaml`.
+- No subagent to run before Phase 1.

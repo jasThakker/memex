@@ -28,7 +28,10 @@ General knowledge graph over any Python codebase and its docs, served to agents 
 - Before each phase, explain what and why in a few lines and wait for approval.
 
 ## Workflow
+Full procedure and rationale: `docs/workflow.md`.
+- At the start of each phase, read DESIGN.md, `docs/workflow.md` and the latest DEVLOG.md entry (including its "Next" section) before planning.
 - Plan mode at the start of each phase; slices follow the approved plan.
+- One branch per phase (`phase-N-<name>`), merged into `main` at phase end with `git merge --no-ff` so each phase has a visible merge commit. Keep the phase branch. Never commit directly to `main`. Never push without asking.
 - Slice loop: failing test, user reviews diff, run red, implement, run green, propose commit.
 - `reviewer` (`.claude/agents/reviewer.md`): after slices touching ingest, graph, query or check_change, and once at phase end. Only when the user invokes it explicitly.
 - Explore (built-in): Phase 1, to map Mealie and draft eval questions. Answers are verified by hand.
