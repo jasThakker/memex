@@ -112,3 +112,28 @@ Template:
 - Carry to Phase 4: the doc chunker must store headings as plain text (links reduced to their visible text) so `path#Heading` references match.
 - Possible post-v1 tool: "subclasses of X" (q01 showed `impact_of` mixes subclasses with other dependents).
 - Reviewer: Phase 2 is the first phase with core logic. Claude gives the exact reviewer prompt after the first parser slice and once at the end of the phase.
+
+## Phase 2: Parse + classify (in progress, started 2026-11-05)
+
+**Approved plan** (branch `phase-2-parse`). If this session was cleared, continue from here.
+
+Decisions:
+- `memex/graph/model.py`: one frozen dataclass per node label (`ModuleNode`, `ClassNode`, `FunctionNode`, `ExternalNode`, `DocNode`), `Node` is their union; one frozen `Edge(kind, source, target, line, confidence, names, position, ref_kind, attr, extractor, match)`; `GraphBatch(codebase, nodes, edges, stats)`. Written in full now because the schema freezes after Phase 3.
+- External ids are `{codebase}:ext:{dotted}` with a `codebase` property (DESIGN section 7 updated).
+- Each `packages` entry is a path relative to `root`; module names start at that directory's own name (`src/pkg` gives `pkg.*`).
+- Classes and functions at module level or inside classes get nodes; anything defined inside a function does not (DESIGN section 13 updated).
+- Imports: every import statement anywhere in the module. `from m import a, b` gives one IMPORTS edge per name: to `m.a` if it is a class, function or submodule in the codebase, else to module `m`, else to External `m.a`. Relative imports resolve against the importing module's package. Re-exports through a package `__init__` are followed up to 5 hops. `import *` gives one edge to the module with `names=("*",)`.
+- `__init__.py` is labeled as its directory (`pkg/__init__.py` is layer `root`; `pkg/routes/__init__.py` is layer `routes`, no domain). Other dunder files lose both underscore pairs. Domain rule order: underscores, first matching prefix, first matching suffix, singularize (`-ies` to `-y`; drop trailing `-s` except after `s`, `u`, `i`; keep `-ics`). DESIGN section 8 updated.
+- `layers` keys match as path prefixes under the package directory, longest first; unmatched folders use the default rule.
+- Fixtures load through `tests/fixtures/memex.toml` (`layered_app` with rules, `plainrepo` with defaults).
+- `GraphBatch.stats` carries file count, parse errors and layer/domain counts; the Phase 2 report is printed with a one-line command (the `memex stats` CLI is Phase 3).
+- Reviewer runs twice: after slice 3 and at phase end. CLAUDE.md reworded to "after each group of core-logic slices named in the phase plan".
+
+Slices:
+1. Model + walker (`memex/graph/model.py`, `memex/ingest/code/walker.py`, both fixtures).
+2. Parser (`memex/ingest/code/parser.py`: nodes, DEFINES, raw imports, parse errors).
+3. Imports (`memex/ingest/code/resolver.py`: `link_imports`), then reviewer run 1.
+4. Classifier (`memex/ingest/code/classify.py`).
+5. Pipeline + real repos (`index_code` in `memex/ingest/code/__init__.py`, `-m realrepo` smoke tests for Mealie and httpx, layer/domain reports for the user), then reviewer run 2.
+
+Slice status: 0 (handoff) done.

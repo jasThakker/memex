@@ -34,7 +34,7 @@ Full procedure and rationale: `docs/workflow.md`.
 - Plan mode at the start of each phase; slices follow the approved plan.
 - One branch per phase (`phase-N-<name>`), merged into `main` at phase end with `git merge --no-ff` so each phase has a visible merge commit. Keep the phase branch. Never commit directly to `main`. Never push without asking.
 - Slice loop: failing test, user reviews diff, run red, implement, run green, propose commit.
-- `reviewer` (`.claude/agents/reviewer.md`): after slices touching ingest, graph, query or check_change, and once at the end of each phase that contains such slices (Phases 2 to 7). Not for scaffolding, config or docs (so not Phase 1). Only when the user invokes it explicitly.
+- `reviewer` (`.claude/agents/reviewer.md`): after each group of core-logic slices (ingest, graph, query, check_change) named in the phase plan, and once at the end of each phase that has them (Phases 2 to 7). Not for scaffolding, config or docs (so not Phase 1). Only when the user invokes it explicitly.
 - Explore (built-in): Phase 1, to map Mealie and draft eval questions. Answers are verified by hand.
 - The eval runs through `uv run python eval/run.py`, not a subagent.
 - One git worktree: Phase 4 (docs) in parallel with Phase 5 (tools).
