@@ -10,7 +10,7 @@ from neo4j import Driver
 
 from memex.cli import format_stats, main, stats_from_batch
 from memex.config import load_config
-from memex.ingest.code import index_code
+from memex.ingest import index_codebase
 from memex.query.codebases import codebase_stats
 
 pytestmark = pytest.mark.neo4j
@@ -35,7 +35,7 @@ def test_index_then_stats_print_the_same_summary(
 
 @pytest.mark.usefixtures("neo4j_env")
 def test_codebase_stats_reads_back_what_was_indexed(driver: Driver) -> None:
-    batch = index_code(load_config(FIXTURES / "memex.toml").get("layered_app"))
+    batch = index_codebase(load_config(FIXTURES / "memex.toml").get("layered_app"))
     assert main(["index", "layered_app", "--config", CONFIG]) == 0
 
     stored = codebase_stats(driver, "layered_app")

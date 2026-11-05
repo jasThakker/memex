@@ -254,3 +254,68 @@ Slices: (1) SymbolTable + INHERITS, (2) CALLS, (3) Extractor Protocol + `sqlalch
 - Open questions for the Phase 5 plan: the `fastmcp` dependency; how tools get a driver and validate `codebase`; whether `list_codebases` reuses `codebase_stats`; the 4 KB size budget against real Mealie results; where short-name ambiguity is resolved.
 - Carry: measure in the eval how often the shared-method-name gap costs an answer; the `ambiguous` tier and attribute typing wait for that data.
 - No subagent to run before Phases 4 and 5. The reviewer runs inside each after the slice groups its plan names; Claude gives the exact prompt each time.
+
+## Phase 4: Docs (2026-11-05)
+
+**Goal:** Index each codebase's Markdown docs as Doc nodes (one per heading chunk) with MENTIONS edges to the code they name, so Phase 5's `search_docs` and Phase 6's `check_change` have rules to cite. Built in the git worktree `../memex-docs` on `phase-4-docs`, in parallel with Phase 5 on `phase-5-tools`.
+
+**Approved plan** (written before any code):
+
+Seam with Phase 5 (agreed before the worktree started): Phase 4 owns `memex/ingest/` and adds `index_codebase(codebase) -> GraphBatch`; in `memex/cli.py` it changes only the `index_code` call in `_index`; no changes to `memex/query/`, `memex/mcp/` or the frozen models; Phase 4 merges into `main` first.
+
+Decisions (the open questions from Phase 3's "Next"):
+- Heading text is plain text: links reduced to their visible text, code and emphasis markers dropped.
+- Doc id anchor = the heading's plain text, ` (2)`, ` (3)` for repeats in one file, empty for text before the first heading. Ids then equal the eval's `path#Heading` references.
+- Mentions without false hits on common words: whole qualnames, root-relative paths, and backticked names that are unique and not a dunder, keyword, builtin or builtin type method name; ambiguous names give no edge.
+- ADRs in the self-index: `doc_kinds` labels `docs/decisions/*.md` as `adr`.
+- No new dependencies: a line-based chunker, not a Markdown library.
+
+Slices: (1) chunker, (2) loader and kinds, (3) mention linker, (4) `index_codebase` and the CLI line, then reviewer run 1, (5) Neo4j and real-repo tests plus the ADR kind, (6) DESIGN updates, reviewer run 2, DEVLOG, merge. Built as planned, with one fix commit after each reviewer run.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | Slices 1 to 4 against DESIGN sections 4, 5, 7, 12 and the Phase 4 decisions; focus on misdetected headings, anchor collisions, mention false hits and misses, off-by-one line ranges, weak tests | 15 findings, none high; about 59k subagent tokens, 4.2 minutes | Fixed 1 to 6, 8, 10, 11 and the three test gaps in "Address reviewer run 1"; documented 7, 9 and part of 5 in DESIGN section 13 |
+| reviewer (run 2) | End of phase: run 1 fixes, slice 5 tests, DESIGN updates and the whole docs layer against DESIGN sections 5, 7, 12, 13; regressions, Doc id collisions, real-doc mentions, the Phase 5 seam | 9 findings, 1 high; about 100k subagent tokens, 6.5 minutes | Fixed 1, 2, 4, 7, 8 in "Address reviewer run 2"; documented 3, 5, 6, 9 and its section 13 omissions |
+
+**What the reviewer caught that Claude had missed:**
+- Run 1: wrapped list items, lazy quote lines and HTML followed by `---` became setext headings; a ```` ```cmd``` ```` line opened a fence that swallowed the rest of the file; headings inside HTML comments were indexed; a 4-space line closed a fence; form feeds shifted every line number; a `../` docs glob was silently accepted.
+- Run 1, tests: the common-name guard, the uniqueness check and the setext guards could each be deleted with every test still green. Claude's own mutation check then found the thematic-break guard was still uncovered and added a test for it.
+- Run 2: the run 1 multi-line setext fix was a regression (a list interrupting a paragraph, then `---`, made the whole run one heading); absolute and empty docs globs crashed with a traceback; two run 1 fixes had no test that failed without them.
+- Claude reproduced every behavior finding of both runs before the decision. All reproduced; none changed any chunk or mention in the three benchmarks' docs. In run 1, the `../` glob was silently accepted rather than crashing as the report said.
+
+**What went wrong:**
+- The first mention rule linked bare method names. Checked on real docs after slice 3, most were ordinary words (`slug`, `groups`, `json`, `timeout`, `auth`, `headers`); fixed by requiring `Class.method` for methods. Claude first said 9 such edges; the list it showed had 11.
+- A slice 2 test used a glob with `*` as a `pytest.raises(match=...)` regex; Claude caught it before running and escaped it.
+- Claude said slice 6 would add no new DESIGN sections, then added the subsection "Doc chunks and mentions" to section 7, and flagged it afterwards instead of asking first.
+- The lint hook reported undefined names between parallel edits of one file (already fixed by the next edit), as in Phase 3.
+
+**What I changed (human edits and overrides):**
+- Chose the anchor format (plain text plus ` (2)`), the strict backtick-name rule and the `adr` kind for the self-index.
+- Chose to never link bare method names, after seeing the false hits on real docs.
+- Chose that the Codebase node's `parse_errors` counts doc files too, so the summary count matches the listed errors (the plan said code only).
+- Accepted Claude's fix-or-document split for both reviewer runs, and kept the new DESIGN subsection.
+- Questions I asked along the way: how many slices were left, what Claude recommended about running reviewer run 1 before slice 5, why Claude mentioned Phase 3 during Phase 4 (it was only the precedent for a separate reviewer-fix commit), and whether the next step was for me to paste the reviewer prompt.
+
+**Known limits** (documented in DESIGN section 13, not fixed):
+- `` `Depends(generate_session)` `` (Mealie AGENTS.md:34) does not link `generate_session`, a symbol eval q09 expects: names inside call spans are not linked.
+- Backtick spans in HTML comments and indented code still link; headings in blockquotes and list items are not detected; a leading `---` rule is read as front matter.
+- Anchors are reduced by pattern: `Optional[str]` gives `Optionalstr`, angle brackets outside code vanish, escapes and entities are kept.
+
+**Decisions / ADRs:** No ADR: the graph model and tool contract are unchanged (Doc, MENTIONS and `doc_text` were already frozen by ADR-001). DESIGN sections 5, 7, 12 and 13 updated to the code as built.
+
+**Numbers:**
+- 9 commits on `phase-4-docs` (6 slice or docs commits, 2 reviewer fix commits, this entry); about 1.1 hours from the Phase 3 merge to the last fix commit, against an estimate of 1.5 hours.
+- Tests: 280 unit in about 2.5 s, 17 Neo4j integration in about 18 s (container included), 17 real-repo smoke tests.
+- Mealie: 247 Doc nodes (36 files: 1 agents, 9 contributor, 26 user), 23 MENTIONS (all 23 checked by hand: no false hits), 0 doc parse errors; indexed into Neo4j in 7.1 s. Full-text "manually edit" returns the generated-types rule (`AGENTS.md#Backend Architecture (mealie/)`) third, after `#Common Gotchas` and `#Frontend Architecture (frontend/)`.
+- httpx (defaults only): 121 Doc nodes from 14 files, all kind `doc`, 36 MENTIONS.
+- Memex self-index: 30 Doc nodes, 46 MENTIONS.
+- All 11 doc references in `eval/questions.yaml` exist as Doc ids (now a realrepo test).
+- Reviewer: 2 runs, about 159k subagent tokens in total.
+
+**Next:**
+- Merge `phase-4-docs` into `main` with `--no-ff` (keep the branch). Then the Phase 5 session merges `main` into `phase-5-tools`; reviewer run 2 found that the two branches merge with no conflicts.
+- For Phase 5 (`search_docs`): Doc ids are `{codebase}:doc:{path}#{anchor}` with the anchor as the heading's plain text; ranking matters (the Mealie rule above ranks third for "manually edit"); `memex index` now writes docs, so re-index all three codebases after the merge.
+- Carry to Phase 6 (`check_change`): guideline retrieval should not rely on MENTIONS alone, because names inside call spans (`Depends(generate_session)`) are not linked; measure in the Phase 7 eval whether that costs q09 before widening the mention rule.
+- `vendor/` was fetched separately into the worktree for the realrepo tests; it can be deleted with the worktree.
+- No subagent to run before Phase 6. The reviewer runs inside Phase 6 after the slice groups its plan names; Claude gives the exact prompt each time.

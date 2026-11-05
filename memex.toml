@@ -35,8 +35,11 @@ singularize = true
 "docs/docs/contributors/**" = "contributor"
 "docs/docs/documentation/**" = "user"
 
-[codebases.memex]                  # self-index: defaults only
+[codebases.memex]                  # self-index: no code rules, no extractors
 root = "."
 packages = ["memex"]
 exclude = ["tests/**", "vendor/**"]
 docs = ["README.md", "DESIGN.md", "CLAUDE.md", "docs/decisions/*.md"]
+
+[codebases.memex.doc_kinds]        # ADRs get their own kind
+"docs/decisions/*.md" = "adr"
