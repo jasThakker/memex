@@ -145,3 +145,52 @@ def test_a_malformed_neo4j_uri_exits_2(
 
     assert main(["stats", "layered_app", "--config", CONFIG]) == 2
     assert "invalid NEO4J_URI 'nonsense://localhost'" in capsys.readouterr().err
+
+
+class FakeDriver:
+    def __enter__(self) -> FakeDriver:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        pass
+
+    def verify_connectivity(self) -> None:
+        pass
+
+
+class FakeServer:
+    def __init__(self) -> None:
+        self.ran_with: dict[str, object] | None = None
+
+    def run(self, **kwargs: object) -> None:
+        self.ran_with = kwargs
+
+
+def test_serve_builds_the_server_over_the_registry_and_runs_it_on_stdio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    driver, server = FakeDriver(), FakeServer()
+    built: list[tuple[object, list[str]]] = []
+
+    def fake_build(d: object, registry: object) -> FakeServer:
+        built.append((d, registry.names()))  # type: ignore[attr-defined]
+        return server
+
+    monkeypatch.setattr("memex.cli.connect", lambda: driver)
+    monkeypatch.setattr("memex.cli.build_server", fake_build)
+
+    assert main(["serve", "--config", str(FIXTURES / "memex.toml")]) == 0
+    assert built == [(driver, ["layered_app", "plainrepo"])]
+    assert server.ran_with is not None and server.ran_with["transport"] == "stdio"
+
+
+def test_serve_with_a_bad_config_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["serve", "--config", str(tmp_path / "missing.toml")]) == 2
+    assert "cannot read" in capsys.readouterr().err
+
+
+def test_serve_takes_no_codebase() -> None:
+    with pytest.raises(SystemExit):
+        main(["serve", "layered_app"])

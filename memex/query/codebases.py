@@ -2,7 +2,8 @@
 
 from neo4j import Driver, RoutingControl
 
-from memex.query.models import CodebaseStats
+from memex.config import Registry
+from memex.query.models import CodebaseInfo, CodebaseList, CodebaseStats
 
 
 def codebase_stats(driver: Driver, codebase: str) -> CodebaseStats | None:
@@ -57,3 +58,20 @@ def codebase_stats(driver: Driver, codebase: str) -> CodebaseStats | None:
         layers={row["key"]: row["n"] for row in layers},
         domains={row["key"]: row["n"] for row in domains},
     )
+
+
+def list_codebases(driver: Driver, registry: Registry) -> CodebaseList:
+    """Every codebase that is both registered and indexed, by name, with node and edge counts
+    (no layer or domain counts). One no longer in memex.toml is left out, as every other tool
+    would reject it."""
+    rows, _, _ = driver.execute_query(
+        "MATCH (c:Codebase) WHERE c.name IN $names RETURN c.name AS name ORDER BY name",
+        names=registry.names(),
+        routing_=RoutingControl.READ,
+    )
+    infos = []
+    for row in rows:
+        stats = codebase_stats(driver, row["name"])
+        if stats is not None:
+            infos.append(CodebaseInfo(**stats.model_dump(exclude={"layers", "domains"})))
+    return CodebaseList(codebases=infos)
