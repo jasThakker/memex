@@ -72,7 +72,9 @@ def index_code(codebase: Codebase) -> GraphBatch:
         ref=codebase.ref,
         commit=codebase.commit,
         extractors=codebase.extractors,
+        files=len(sources),
         parse_errors=len(errors),
+        unresolved_calls=unresolved_calls,
     )
     stats = IndexStats(
         files=len(sources),

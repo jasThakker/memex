@@ -52,6 +52,8 @@ def test_batch_starts_with_the_codebase_node() -> None:
     assert node.root == str(codebase.root)
     assert node.extractors == ("sqlalchemy",)
     assert node.parse_errors == 0
+    assert node.files == 27
+    assert node.unresolved_calls == LAYERED.stats.unresolved_calls == 5
     assert node.indexed_at
 
 
