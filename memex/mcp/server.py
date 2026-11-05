@@ -13,14 +13,24 @@ from fastmcp.exceptions import ToolError
 from neo4j import Driver
 
 from memex.config import Registry, UnknownCodebaseError
-from memex.query import calls, codebases, docs, impact, symbols
-from memex.query.models import CallGraph, CodebaseList, DocSearch, Impact, SymbolSearch
+from memex.query import calls, change, codebases, docs, impact, symbols
+from memex.query.models import (
+    CallGraph,
+    ChangeCheck,
+    ChangeProposal,
+    CodebaseList,
+    DocSearch,
+    Impact,
+    SymbolSearch,
+)
 from memex.query.scope import NotIndexedError, check_codebase
 
 INSTRUCTIONS = """\
 Memex answers questions about the structure of indexed Python codebases and their docs:
 where symbols are, who calls what, what depends on a symbol, and which doc sections are
-relevant. Every tool except list_codebases needs a codebase name; call list_codebases first.
+relevant. Before a change, check_change lists the code it affects and the documented rules
+that apply, each quoted and cited; judge the rules yourself. Every tool except
+list_codebases needs a codebase name; call list_codebases first.
 A `symbol` is a full dotted qualname or its last segments (`get_one`, `Client.get`). When a
 name matches several symbols, the result has symbol=None and the candidates: call again with
 one of their qualnames. Results are capped by `limit`; `truncated` says more exist.
@@ -96,5 +106,17 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         range, a short snippet and the symbols the section mentions; read the file for the
         full section."""
         return scoped(codebase, lambda: docs.search_docs(driver, codebase, query, limit))
+
+    @mcp.tool(annotations=READ_ONLY)
+    def check_change(codebase: str, proposal: ChangeProposal) -> ChangeCheck:
+        """Check a proposed change before making it. `proposal.description` says what will
+        change (plain text, at most 500 characters); `proposal.symbols` optionally names the
+        symbols, otherwise code-shaped names in the description are used. Returns the
+        resolved, ambiguous and unresolved names, how many dependents each layer has, and up
+        to 6 documented rules: one sentence each with its stance (forbids, encourages or
+        related, from modal verbs only), path, heading and line range, found because the
+        section mentions the changed code or by a search on the description. The stance is a
+        hint: read the quote and judge."""
+        return scoped(codebase, lambda: change.check_change(driver, codebase, proposal))
 
     return mcp
