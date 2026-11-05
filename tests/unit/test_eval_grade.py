@@ -10,12 +10,16 @@ from grade import (
     Answer,
     Score,
     Usage,
+    check_tools,
     extract_answer,
     grade_question,
+    grade_run,
+    load_questions,
     main,
     normalize_doc,
     normalize_symbol,
     read_transcript,
+    results_md,
     score,
     summarize,
 )
@@ -288,8 +292,8 @@ def test_summarize_averages_by_condition_and_category_and_sums_usage() -> None:
     assert a["recall"] == pytest.approx((1.0 + 0.25) / 2)
     assert a["f1"] == pytest.approx((1.0 + 0.4) / 2)
     assert a["by_category"] == {
-        "callers": pytest.approx(1.0),
-        "locate": pytest.approx(0.4),
+        "callers": {"precision": 1.0, "recall": 1.0, "f1": pytest.approx(1.0)},
+        "locate": {"precision": 1.0, "recall": 0.25, "f1": pytest.approx(0.4)},
     }
     assert a["usage"] == {
         "input_tokens": 240,
@@ -309,10 +313,13 @@ def test_summarize_averages_by_condition_and_category_and_sums_usage() -> None:
 
 def test_grade_run_writes_the_same_scores_twice_and_reports_each_question(tmp_path: Path) -> None:
     question = {**QUESTION, "id": "q01"}
-    (tmp_path / "meta.json").write_text(json.dumps({"name": "t", "root": ROOT}))
+    meta = {"name": "t", "root": ROOT, "invocations": [{"memex_commit": "abc"}]}
+    (tmp_path / "meta.json").write_text(json.dumps(meta))
     answer = fenced('{"symbols": ["pkg.a.Alpha"], "docs": []}')
     (tmp_path / "q01-B-1.jsonl").write_text("\n".join(lines(INIT, {**RESULT, "result": answer})))
     (tmp_path / "baseline-B-1.jsonl").write_text("\n".join(lines(INIT, RESULT)))
+    small = {**RESULT, "usage": {**RESULT["usage"], "cache_creation_input_tokens": 1_000}}
+    (tmp_path / "baseline-A-1.jsonl").write_text("\n".join(lines(INIT_A, small)))
     (tmp_path / "notes.jsonl").write_text("ignored")
     questions_file = tmp_path / "questions.yaml"
     questions_file.write_text(json.dumps([question]))  # JSON is valid YAML
@@ -326,7 +333,171 @@ def test_grade_run_writes_the_same_scores_twice_and_reports_each_question(tmp_pa
     assert [run["id"] for run in scores["runs"]] == ["q01"]
     assert scores["runs"][0]["combined"]["recall"] == 0.25
     assert scores["runs"][0]["tool_calls"] == {}
+    assert scores["runs"][0]["problem"] is None
+    assert set(scores["summary"]) == {"B"}
+    assert scores["summary"]["B"]["runs"] == 1
     assert scores["baselines"]["B"]["mcp_servers"] == [["memex", "connected"]]
+    assert scores["baselines"]["A"]["problem"] is None
     report = (tmp_path / "results.md").read_text()
-    assert "| q01 | callers | B | 0.40 |" in report
+    assert "| q01 | 1 | callers | B | 0.40 |" in report
     assert "- missed: `pkg.b.beta`" in report
+    assert "+8,000 input tokens" in report
+
+
+def test_grade_run_names_a_question_missing_from_the_yaml(tmp_path: Path) -> None:
+    (tmp_path / "meta.json").write_text(json.dumps({"name": "t", "root": ROOT}))
+    (tmp_path / "q77-A-1.jsonl").write_text("\n".join(lines(INIT_A, RESULT)))
+    questions_file = tmp_path / "questions.yaml"
+    questions_file.write_text(json.dumps([{**QUESTION, "id": "q01"}]))
+    with pytest.raises(ValueError, match="q77"):
+        grade_run(tmp_path, load_questions(questions_file))
+
+
+def test_an_invalid_run_is_reported_and_left_out_of_the_means(tmp_path: Path) -> None:
+    question = {**QUESTION, "id": "q01"}
+    (tmp_path / "meta.json").write_text(json.dumps({"name": "t", "root": ROOT}))
+    full = fenced(
+        json.dumps({"symbols": QUESTION["expected"]["symbols"], "docs": ["GUIDE.md#Rules"]})
+    )
+    (tmp_path / "q01-B-1.jsonl").write_text(
+        "\n".join(lines(INIT_FAILED, {**RESULT, "result": full}))
+    )
+    (tmp_path / "q01-A-1.jsonl").write_text("\n".join(lines(INIT_A, RESULT)))
+    questions_file = tmp_path / "questions.yaml"
+    questions_file.write_text(json.dumps([question]))
+    graded = grade_run(tmp_path, load_questions(questions_file))
+    summary = graded["summary"]
+    assert summary["B"]["runs"] == 1
+    assert summary["B"]["invalid"] == 1
+    assert summary["B"]["f1"] is None
+    assert summary["B"]["usage"]["total_input"] == 39_120  # its tokens were still spent
+    assert summary["A"]["invalid"] == 0
+    assert "(invalid: memex failed)" in results_md(graded)
+
+
+# Reviewer run 1: tool checks per condition
+
+INIT_A = {**INIT, "tools": ["Glob", "Grep", "Read"], "mcp_servers": []}
+INIT_FAILED = {**INIT, "tools": ["Read"], "mcp_servers": [{"name": "memex", "status": "failed"}]}
+
+
+@pytest.mark.parametrize(
+    ("condition", "init", "problem"),
+    [
+        ("A", INIT_A, None),
+        ("B", INIT, None),
+        ("A", {**INIT_A, "tools": ["Glob", "Grep", "Read", "Bash"]}, "tools: unexpected Bash"),
+        ("A", {**INIT_A, "tools": ["Grep", "Read"]}, "tools: missing Glob"),
+        ("A", INIT, "tools: missing Glob, Grep; unexpected mcp__memex__find_symbol"),
+        ("A", {**INIT_A, "mcp_servers": [{"name": "x", "status": "connected"}]}, "mcp: x"),
+        ("B", INIT_FAILED, "memex failed"),
+        ("B", {**INIT, "mcp_servers": []}, "memex missing"),
+        ("B", {**INIT, "tools": ["Read"]}, "tools: no mcp__memex__ tools"),
+        ("B", {**INIT, "tools": ["mcp__memex__find_symbol"]}, "tools: missing Read"),
+        (
+            "B",
+            {**INIT, "tools": ["Read", "Grep", "mcp__memex__find_symbol"]},
+            "tools: unexpected Grep",
+        ),
+        (
+            "B",
+            {**INIT, "mcp_servers": [*INIT["mcp_servers"], {"name": "x", "status": "connected"}]},
+            "mcp: x",
+        ),
+    ],
+)
+def test_check_tools_per_condition(
+    condition: str, init: dict[str, Any], problem: str | None
+) -> None:
+    assert check_tools(condition, read_transcript(lines(init, RESULT))) == problem
+
+
+def test_a_transcript_with_no_init_event_fails_the_check() -> None:
+    assert check_tools("A", read_transcript(lines(RESULT))) == "no init event"
+
+
+# Reviewer run 1: damaged or unfinished transcripts
+
+
+def test_an_undecodable_line_is_counted_not_fatal() -> None:
+    raw = lines(INIT, ASSISTANT_TOOLS, RESULT)[:-1] + ['{"type": "assis', "not json"]
+    transcript = read_transcript(raw)
+    assert transcript.bad_lines == 2
+    assert transcript.is_error is False
+    assert transcript.result_text == RESULT["result"]
+
+
+def message(mid: str, output: int, *, cache_read: int = 0) -> dict[str, Any]:
+    return {
+        "type": "assistant",
+        "message": {
+            "id": mid,
+            "content": [{"type": "tool_use", "id": f"t-{mid}-{output}", "name": "Grep"}],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": output,
+                "cache_creation_input_tokens": 100,
+                "cache_read_input_tokens": cache_read,
+            },
+        },
+    }
+
+
+def test_usage_without_a_result_is_estimated_from_assistant_messages_once_per_id() -> None:
+    raw = lines(INIT_A, message("m1", 5), message("m1", 7), message("m2", 3, cache_read=1_000))
+    transcript = read_transcript(raw)
+    assert transcript.is_error is True
+    assert transcript.estimated is True
+    assert transcript.usage == Usage(
+        input_tokens=20,
+        output_tokens=10,  # m1 counted once, with its last usage
+        cache_creation_tokens=200,
+        cache_read_tokens=1_000,
+        turns=2,
+    )
+    assert transcript.tool_calls == ("Grep", "Grep", "Grep")
+
+
+def test_a_result_event_is_not_estimated() -> None:
+    assert read_transcript(lines(INIT, message("m1", 5), RESULT)).estimated is False
+
+
+# Reviewer run 1: normalization fair to raw Markdown
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            "docs/c.md#We Use [GitHub Flow](https://docs.github.com/x), So All Changes",
+            "docs/c.md#we use github flow, so all changes",
+        ),
+        ("AGENTS.md## Common Gotchas", "agents.md#common gotchas"),
+        ("AGENTS.md#### Frontend", "agents.md#frontend"),
+        (
+            "AGENTS.md#Essential Commands (via Task/Taskfile.yml)",
+            "agents.md#essential commands (via task/taskfile.yml)",
+        ),
+    ],
+)
+def test_normalize_doc_reduces_markdown_links_and_heading_marks(raw: str, expected: str) -> None:
+    assert normalize_doc(raw, ROOT) == expected
+
+
+def test_the_real_linked_heading_matches_its_expected_item() -> None:
+    path = "docs/docs/contributors/developers-guide/code-contributions.md"
+    tail = ", So All Code Changes Happen Through Pull Requests"
+    expected = f"{path}#We Use GitHub Flow{tail}"
+    link = "https://docs.github.com/en/get-started/using-github/github-flow"
+    raw = f"{path}#We Use [GitHub Flow]({link}){tail}"
+    assert normalize_doc(raw, ROOT) == normalize_doc(expected, ROOT)
+
+
+def test_normalize_symbol_strips_parentheses_outside_backticks() -> None:
+    assert normalize_symbol("`pkg.b.beta`()") == "pkg.b.beta"
+
+
+def test_a_null_list_is_empty_and_a_one_line_block_is_read() -> None:
+    assert extract_answer(fenced('{"symbols": ["x.y"], "docs": null}')) == Answer(symbols=("x.y",))
+    assert extract_answer('```json {"symbols": ["x.y"]}```') == Answer(symbols=("x.y",))
+    assert extract_answer('```jsonc\n{"symbols": ["x.y"]}\n```') is None
