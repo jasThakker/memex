@@ -60,3 +60,20 @@ def test_excluded_alembic_migrations_are_not_indexed(batch: GraphBatch) -> None:
     paths = [node.path for node in batch.nodes if isinstance(node, ModuleNode)]
 
     assert not [path for path in paths if path.startswith("mealie/alembic/")]
+
+
+def test_recipe_model_has_incoming_references_from_other_models(batch: GraphBatch) -> None:
+    classes = {node.id: node for node in batch.nodes if isinstance(node, ClassNode)}
+    [recipe] = [node for node in classes.values() if node.name == "RecipeModel"]
+    incoming = [
+        edge for edge in batch.edges if edge.kind == "REFERENCES" and edge.target == recipe.id
+    ]
+    found = {(classes[edge.source].name, edge.ref_kind, edge.attr) for edge in incoming}
+
+    assert recipe.tablename == "recipes"
+    # Both ForeignKey("recipes.id") columns of mealie/db/models/recipe/ingredient.py.
+    assert ("RecipeIngredientModel", "foreign_key", "recipe_id") in found
+    assert ("RecipeIngredientModel", "foreign_key", "referenced_recipe_id") in found
+    assert len(incoming) >= 20
+    assert {classes[edge.source].layer for edge in incoming} == {"db_models"}
+    assert {edge.extractor for edge in incoming} == {"sqlalchemy"}

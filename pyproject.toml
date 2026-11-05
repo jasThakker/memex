@@ -9,6 +9,9 @@ dependencies = [
     "pydantic>=2.11",
 ]
 
+[project.scripts]
+memex = "memex.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
