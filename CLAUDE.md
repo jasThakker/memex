@@ -6,16 +6,17 @@ General knowledge graph over any Python codebase and its docs, served to agents 
 - Setup: `uv sync` (Python 3.14, pinned in `.python-version`; uv downloads it if missing)
 - Fetch benchmark repos: `uv run python scripts/fetch_codebases.py` (Mealie and httpx into `vendor/`, gitignored; never commit them)
 - Neo4j: `docker compose up -d neo4j` (browser at http://localhost:7474)
-- Unit tests: `uv run pytest` (no DB)
-- All tests: `uv run pytest -m "neo4j or not neo4j"`; real-repo smoke (Mealie, httpx): `uv run pytest -m realrepo`
+- Unit tests: `uv run pytest` (default run: no DB, no `vendor/`; excludes the `neo4j` and `realrepo` markers)
+- Neo4j tests: `uv run pytest -m neo4j` (needs Docker; uses a throwaway testcontainer)
+- Real-repo smoke tests (Mealie, httpx): `uv run pytest -m realrepo` (needs fetched `vendor/`)
 - Lint and format: `uv run ruff check .` and `uv run ruff format .`
-- Index: `uv run memex index mealie` | Serve: `uv run memex serve`
+- From Phase 3: `uv run memex index <codebase>` and `uv run memex stats <codebase>`. From Phase 5: `uv run memex serve`.
 - HTML views of all docs: `python3 scripts/render_docs.py` (writes `docs/html/`, open e.g. `open docs/html/DESIGN.html`)
 
 ## Rules
 - Tests first: add or extend a fixture with the known answer, see the test fail, then implement.
 - Dependency direction: ingest -> graph -> query -> mcp. `ingest` never imports neo4j; `mcp` contains no Cypher.
-- Nothing repo- or framework-specific in the core. Repo rules go in `memex.toml`; framework edges go in an extractor under `memex/ingest/code/extractors/`. No benchmark repo name (`mealie`, `httpx`) may appear in `memex/`; a guardrail test enforces this.
+- Nothing repo- or framework-specific in the core. Repo rules go in `memex.toml`; framework edges go in an extractor under `memex/ingest/code/extractors/`. No external benchmark repo name (`mealie`, `httpx`) may appear in `memex/`, in any case, including comments; a guardrail test enforces this.
 - Fixtures model generic patterns, not one repo. Assertions about a specific real repo belong only in its `-m realrepo` smoke test.
 - Type hints on every function. Pydantic for tool I/O, frozen dataclasses for the graph model.
 - Every tool is read-only and takes `codebase` explicitly (except `list_codebases`). Never infer scope.
@@ -33,7 +34,7 @@ Full procedure and rationale: `docs/workflow.md`.
 - Plan mode at the start of each phase; slices follow the approved plan.
 - One branch per phase (`phase-N-<name>`), merged into `main` at phase end with `git merge --no-ff` so each phase has a visible merge commit. Keep the phase branch. Never commit directly to `main`. Never push without asking.
 - Slice loop: failing test, user reviews diff, run red, implement, run green, propose commit.
-- `reviewer` (`.claude/agents/reviewer.md`): after slices touching ingest, graph, query or check_change, and once at phase end. Only when the user invokes it explicitly.
+- `reviewer` (`.claude/agents/reviewer.md`): after slices touching ingest, graph, query or check_change, and once at the end of each phase that contains such slices (Phases 2 to 7). Not for scaffolding, config or docs (so not Phase 1). Only when the user invokes it explicitly.
 - Explore (built-in): Phase 1, to map Mealie and draft eval questions. Answers are verified by hand.
 - The eval runs through `uv run python eval/run.py`, not a subagent.
 - One git worktree: Phase 4 (docs) in parallel with Phase 5 (tools).
