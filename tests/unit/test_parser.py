@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 from textwrap import dedent
 
@@ -92,7 +93,7 @@ def test_functions_inside_functions_get_no_node_but_their_imports_count() -> Non
         RawImport(module="fastapi", name="FastAPI", alias=None, level=0, line=3),
         RawImport(module="app.routes", name="orders", alias=None, level=0, line=5),
         RawImport(module="app.routes", name="users", alias=None, level=0, line=5),
-        RawImport(module="uvicorn", name=None, alias=None, level=0, line=22),
+        RawImport(module="uvicorn", name=None, alias=None, level=0, line=22, module_level=False),
     )
 
 
@@ -193,3 +194,138 @@ def test_syntax_error_is_reported_not_raised() -> None:
     assert isinstance(parsed, ParseError)
     assert (parsed.path, parsed.line) == ("pkg/m.py", 2)
     assert parsed.message
+
+
+def test_imports_inside_functions_and_classes_are_not_module_level() -> None:
+    parsed = parse_text(
+        """\
+        import a
+        if a:
+            import b
+        class C:
+            import c
+        def f():
+            import d
+        """
+    )
+
+    assert isinstance(parsed, ParsedModule)
+    assert [(raw.module, raw.module_level) for raw in parsed.imports] == [
+        ("a", True),
+        ("b", True),
+        ("c", False),
+        ("d", False),
+    ]
+
+
+def test_definitions_in_every_kind_of_block_get_nodes() -> None:
+    parsed = parse_text(
+        """\
+        with ctx:
+            def in_with(): ...
+        match mode:
+            case "a":
+                def in_match(): ...
+        for _ in items:
+            pass
+        else:
+            def in_for_else(): ...
+        while flag:
+            def in_while(): ...
+        try:
+            pass
+        except* ValueError:
+            def in_except_star(): ...
+        finally:
+            def in_finally(): ...
+        class C:
+            if flag:
+                def in_class_if(self): ...
+        """
+    )
+
+    assert isinstance(parsed, ParsedModule)
+    assert [node.qualname.removeprefix("pkg.m.") for node in parsed.nodes[1:]] == [
+        "in_with",
+        "in_match",
+        "in_for_else",
+        "in_while",
+        "in_except_star",
+        "in_finally",
+        "C",
+        "C.in_class_if",
+    ]
+
+
+def test_overload_stubs_give_way_to_the_implementation() -> None:
+    parsed = parse_text(
+        '''\
+        from typing import overload
+        import typing
+
+        class C:
+            @overload
+            def get(self, x: int) -> int: ...
+            @typing.overload
+            def get(self, x: str) -> str: ...
+            def get(self, x):
+                """The implementation."""
+                return x
+        '''
+    )
+
+    assert isinstance(parsed, ParsedModule)
+    [get] = [node for node in parsed.nodes if node.qualname == "pkg.m.C.get"]
+    assert isinstance(get, FunctionNode)
+    assert (get.line, get.end_line, get.signature) == (9, 11, "get(self, x)")
+    assert get.docstring == "The implementation."
+    assert len([edge for edge in parsed.defines if edge.target == "lib:pkg.m.C.get"]) == 1
+
+
+def test_coding_cookie_and_byte_order_mark_are_honored() -> None:
+    source = SourceFile(path="pkg/m.py", qualname="pkg.m", package="pkg")
+    latin1 = "# -*- coding: latin-1 -*-\n'''Caf\xe9 menu.'''\n".encode("latin-1")
+    bom = b"\xef\xbb\xbf'''With a BOM.'''\n"
+
+    parsed_latin1 = parse_module("lib", source, latin1)
+    parsed_bom = parse_module("lib", source, bom)
+
+    assert isinstance(parsed_latin1, ParsedModule)
+    assert parsed_latin1.nodes[0].docstring == "Caf\xe9 menu."
+    assert isinstance(parsed_bom, ParsedModule)
+    assert parsed_bom.nodes[0].docstring == "With a BOM."
+
+
+def test_undecodable_bytes_are_a_parse_error() -> None:
+    source = SourceFile(path="pkg/m.py", qualname="pkg.m", package="pkg")
+
+    parsed = parse_module("lib", source, b"x = '\xff'\n")
+
+    assert isinstance(parsed, ParseError)
+    assert parsed.path == "pkg/m.py"
+
+
+def test_expression_too_deep_to_compile_is_a_parse_error() -> None:
+    parsed = parse_text("x = " + "1+" * 200_000 + "1\n")
+
+    assert isinstance(parsed, ParseError)
+    assert parsed.line is None
+
+
+def test_syntax_warnings_neither_print_nor_fail() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # as under `python -W error`
+        parsed = parse_text("pattern = '\\d+'\n")
+
+    assert isinstance(parsed, ParsedModule)
+
+
+def test_deep_expression_that_parses_still_gives_nodes_and_imports() -> None:
+    # 5,000 terms parse fine but overflow a recursive walk and ast.unparse.
+    parsed = parse_text("import a\ndef f(x=" + "1+" * 5_000 + "1): ...\nimport b\n")
+
+    assert isinstance(parsed, ParsedModule)
+    function = parsed.nodes[1]
+    assert isinstance(function, FunctionNode)
+    assert function.signature == "f(...)"
+    assert [raw.module for raw in parsed.imports] == ["a", "b"]

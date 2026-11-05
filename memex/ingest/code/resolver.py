@@ -2,10 +2,13 @@
 
 Import rules:
 - `import a.b` points at module `a.b` if it is in the codebase, else at External `a.b`.
-- `from m import x` points at `m.x` if that is a module, class or function in the codebase.
-  Otherwise, if `m` is in the codebase and binds `x` by importing it (directly or through a
-  star import), that binding is followed, up to MAX_REEXPORT_HOPS times. If nothing is found,
-  the edge points at module `m`, or at External `m.x` when `m` is outside the codebase.
+- `from m import x` points at what `x` is in `m`: first what `m` binds to `x` with its own
+  module-level imports (last binding first), then a submodule, class or function `m.x`, then
+  a public name from `m`'s star imports. Bindings are followed up to MAX_REEXPORT_HOPS times.
+  If nothing is found, the edge points at module `m`, or at External `m.x` when `m` is
+  outside the codebase.
+- A name under one of the codebase's own top-level packages that was not walked (excluded,
+  or compiled) gets no edge and never becomes External.
 - `from m import *` gives one edge to `m` (or External `m`) with names ("*",).
 - Relative imports resolve against the importing module's package; one that climbs above the
   top-level package is dropped.
@@ -61,46 +64,62 @@ class _Index:
     def __init__(self, modules: Sequence[ParsedModule]) -> None:
         self.modules = {module.source.qualname: module for module in modules}
         self.symbols = {node.qualname for module in modules for node in module.nodes}
+        self.packages = {qualname.split(".")[0] for qualname in self.modules}
 
     def resolve(self, module: ParsedModule, raw: RawImport) -> tuple[str, bool] | None:
         """(dotted target, is_external) for one import, or None if it cannot be placed."""
         base = _absolute(module, raw)
         if base is None:
             return None
-        if raw.name is None or raw.name == "*":
-            return base, base not in self.modules
-        found = self.find(base, raw.name, hops=0)
-        if found is not None:
-            return found, False
+        if raw.name is not None and raw.name != "*":
+            found = self.find(base, raw.name, hops=0)
+            if found is not None:
+                return found, False
         if base in self.modules:
             return base, False
+        if base.split(".")[0] in self.packages:
+            return None  # inside the codebase but not walked (excluded or compiled)
+        if raw.name is None or raw.name == "*":
+            return base, True
         return f"{base}.{raw.name}", True
 
     def find(self, module: str, name: str, hops: int) -> str | None:
-        """Qualname of the module, class or function that `name` in `module` refers to."""
+        """Qualname of the module, class or function that `name` in `module` refers to.
+
+        Order: the module's own imports of `name` (last one first, as Python keeps the last
+        binding), then a submodule, class or function `module.name`, then star imports.
+        """
+        parsed = self.modules.get(module)
+        can_follow = parsed is not None and hops < MAX_REEXPORT_HOPS
+        if parsed is not None and can_follow:
+            for raw in reversed(parsed.imports):
+                if raw.module_level and raw.name != "*" and (raw.alias or raw.name) == name:
+                    found = self._follow(parsed, raw, hops)
+                    if found is not None:
+                        return found
         candidate = f"{module}.{name}"
         if candidate in self.symbols:
             return candidate
-        parsed = self.modules.get(module)
-        if parsed is None or hops >= MAX_REEXPORT_HOPS:
-            return None
-        for raw in parsed.imports:  # an explicit binding of `name` wins over star imports
-            if raw.name == "*" or (raw.alias or raw.name) != name:
-                continue
-            base = _absolute(parsed, raw)
-            if base is None:
-                return None
-            if raw.name is None:  # import a.b as name
-                return base if base in self.modules else None
-            return self.find(base, raw.name, hops + 1)
-        for raw in parsed.imports:
-            if raw.name != "*":
-                continue
-            base = _absolute(parsed, raw)
-            found = None if base is None else self.find(base, name, hops + 1)
-            if found is not None:
-                return found
+        if parsed is not None and can_follow and not name.startswith("_"):
+            for raw in parsed.imports:
+                if raw.module_level and raw.name == "*":
+                    base = _absolute(parsed, raw)
+                    found = None if base is None else self.find(base, name, hops + 1)
+                    if found is not None:
+                        return found
         return None
+
+    def _follow(self, parsed: ParsedModule, raw: RawImport, hops: int) -> str | None:
+        """Where one binding import inside `parsed` leads, or None."""
+        base = _absolute(parsed, raw)
+        if base is None:
+            return None
+        if raw.name is None:  # import a.b as name
+            return base if base in self.modules else None
+        if base == parsed.source.qualname:  # `from . import x` in a package: the submodule
+            submodule = f"{base}.{raw.name}"
+            return submodule if submodule in self.modules else None
+        return self.find(base, raw.name, hops + 1)
 
 
 def _absolute(module: ParsedModule, raw: RawImport) -> str | None:

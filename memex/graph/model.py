@@ -1,8 +1,9 @@
 """The graph model: nodes, edges and the batch that ingest hands to the store.
 
 See DESIGN.md section 7. Frozen after Phase 3; changing it needs an ADR in docs/decisions/.
-Paths are relative to the codebase root, with forward slashes. Layer and domain stay None
-until the classifier sets them.
+Paths are relative to the codebase root, with forward slashes. `line` on a class or function
+is its `class` or `def` line, not its first decorator. Layer and domain stay None until the
+classifier sets them.
 """
 
 from collections.abc import Mapping
@@ -27,6 +28,19 @@ def external_id(codebase: str, dotted: str) -> str:
 def doc_id(codebase: str, path: str, anchor: str) -> str:
     """Id of a Doc node: one heading-delimited chunk of a Markdown file."""
     return f"{codebase}:doc:{path}#{anchor}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CodebaseNode:
+    id: str  # the codebase name
+    name: str
+    root: str
+    indexed_at: str  # ISO 8601
+    source: str | None = None
+    ref: str | None = None
+    commit: str | None = None
+    extractors: tuple[str, ...] = ()
+    parse_errors: int = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -92,7 +106,7 @@ class DocNode:
     kind: str = "doc"
 
 
-Node = ModuleNode | ClassNode | FunctionNode | ExternalNode | DocNode
+Node = CodebaseNode | ModuleNode | ClassNode | FunctionNode | ExternalNode | DocNode
 
 
 @dataclass(frozen=True, kw_only=True)

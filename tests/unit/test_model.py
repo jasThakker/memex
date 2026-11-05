@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from memex.graph.model import Edge, ModuleNode, code_id, doc_id, external_id
+from memex.graph.model import CodebaseNode, Edge, ModuleNode, code_id, doc_id, external_id
 
 
 def test_ids_are_scoped_by_codebase() -> None:
@@ -33,3 +33,13 @@ def test_nodes_and_edges_are_frozen() -> None:
         module.layer = "routes"  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         edge.line = 3  # type: ignore[misc]
+
+
+def test_codebase_node_defaults_to_an_unpinned_codebase_without_extractors() -> None:
+    node = CodebaseNode(
+        id="shop", name="shop", root="/repos/shop", indexed_at="2026-11-05T12:00:00+00:00"
+    )
+
+    assert (node.source, node.ref, node.commit) == (None, None, None)
+    assert node.extractors == ()
+    assert node.parse_errors == 0

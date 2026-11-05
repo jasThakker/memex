@@ -23,22 +23,48 @@ class SourceFile:
 
 
 def walk(codebase: Codebase) -> list[SourceFile]:
-    """Every .py file under the codebase's packages, minus `exclude`, sorted by path."""
+    """Every .py file under the codebase's packages, minus `exclude`, sorted by path.
+
+    A module `x.py` next to a package `x/__init__.py` is skipped: Python imports the package.
+    """
+    _check_packages(codebase)
     files: list[SourceFile] = []
     for package in codebase.packages:
         package_dir = codebase.root / package
-        if not package_dir.is_dir():
-            raise WalkerError(
-                f"codebase {codebase.name!r}: package directory {package!r} "
-                f"not found under {codebase.root}"
-            )
         for file in package_dir.rglob("*.py"):
             path = PurePosixPath(file.relative_to(codebase.root).as_posix())
-            if not file.is_file() or _is_excluded(path, codebase.exclude):
+            if (
+                not file.is_file()
+                or _is_excluded(path, codebase.exclude)
+                or (file.with_suffix("") / "__init__.py").is_file()
+            ):
                 continue
             qualname = _qualname(package_dir.name, file.relative_to(package_dir))
             files.append(SourceFile(path=str(path), qualname=qualname, package=package))
     return sorted(files, key=lambda file: file.path)
+
+
+def _check_packages(codebase: Codebase) -> None:
+    """Every package is a directory, no package lies inside another, and names are unique."""
+    seen: dict[PurePosixPath, str] = {}
+    for package in codebase.packages:
+        if not (codebase.root / package).is_dir():
+            raise WalkerError(
+                f"codebase {codebase.name!r}: package directory {package!r} "
+                f"not found under {codebase.root}"
+            )
+        path = PurePosixPath(package)
+        for other_path, other in seen.items():
+            if path.is_relative_to(other_path) or other_path.is_relative_to(path):
+                raise WalkerError(
+                    f"codebase {codebase.name!r}: packages {other!r} and {package!r} overlap"
+                )
+            if path.name == other_path.name:
+                raise WalkerError(
+                    f"codebase {codebase.name!r}: packages {other!r} and {package!r} "
+                    f"would both be named {path.name!r}"
+                )
+        seen[path] = package
 
 
 def _is_excluded(path: PurePosixPath, patterns: tuple[str, ...]) -> bool:

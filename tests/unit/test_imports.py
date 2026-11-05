@@ -1,6 +1,8 @@
 from pathlib import Path
 from textwrap import dedent
 
+import pytest
+
 from memex.config import load_config
 from memex.graph.model import Edge, ExternalNode, code_id
 from memex.ingest.code.parser import ParsedModule, parse_module
@@ -179,4 +181,115 @@ def test_relative_import_above_the_top_package_is_dropped() -> None:
     edges, externals = link_imports("lib", parse_files({"pkg/m.py": "from ... import x\n"}))
 
     assert edges == []
+    assert externals == []
+
+
+def resolve_use(files: dict[str, str]) -> set[tuple[str, tuple[str, ...]]]:
+    """Import edges leaving `pkg.use` in a codebase made of `files`."""
+    edges, _ = link_imports("lib", parse_files(files))
+    return imports_from(edges, "lib", "pkg.use")
+
+
+def test_reexport_of_a_name_shadows_the_submodule_it_comes_from() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "from .api import api\n",
+            "pkg/api.py": "def api(): ...\n",
+            "pkg/use.py": "from pkg import api\n",
+        }
+    ) == {("pkg.api.api", ("api",))}
+
+
+def test_from_import_of_a_submodule_still_reaches_the_module() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "from . import api\n",
+            "pkg/api.py": "def api(): ...\n",
+            "pkg/use.py": "from pkg import api\n",
+        }
+    ) == {("pkg.api", ("api",))}
+
+
+@pytest.mark.parametrize("first, second", [("_speedups", "_pure"), ("_pure", "_speedups")])
+def test_a_binding_that_cannot_be_resolved_falls_back_to_another(first: str, second: str) -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": f"try:\n    from .{first} import encode\n"
+            f"except ImportError:\n    from .{second} import encode\n",
+            "pkg/_pure.py": "def encode(): ...\n",  # _speedups is a compiled module, never walked
+            "pkg/use.py": "from pkg import encode\n",
+        }
+    ) == {("pkg._pure.encode", ("encode",))}
+
+
+def test_the_last_module_level_binding_wins_and_local_imports_are_not_exports() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "from .old import Thing\nfrom .fast import Thing\n"
+            "def _lazy():\n    from .slow import Thing\n",
+            "pkg/old.py": "class Thing: ...\n",
+            "pkg/fast.py": "class Thing: ...\n",
+            "pkg/slow.py": "class Thing: ...\n",
+            "pkg/use.py": "from pkg import Thing\n",
+        }
+    ) == {("pkg.fast.Thing", ("Thing",))}
+
+
+def test_star_reexports_skip_underscore_names() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "from .impl import *\n",
+            "pkg/impl.py": "def public(): ...\ndef _private(): ...\n",
+            "pkg/use.py": "from pkg import public, _private\n",
+        }
+    ) == {("pkg.impl.public", ("public",)), ("pkg", ("_private",))}
+
+
+def test_explicit_binding_wins_over_a_star_import() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "from .a import *\nfrom .b import thing\n",
+            "pkg/a.py": "def thing(): ...\n",
+            "pkg/b.py": "def thing(): ...\n",
+            "pkg/use.py": "from pkg import thing\n",
+        }
+    ) == {("pkg.b.thing", ("thing",))}
+
+
+def test_aliased_reexports_are_followed() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "from .impl import helper as public\n"
+            "import pkg.tools.text as text_utils\n",
+            "pkg/impl.py": "def helper(): ...\n",
+            "pkg/tools/text.py": "def wrap(): ...\n",
+            "pkg/use.py": "from pkg import public, text_utils\n",
+        }
+    ) == {("pkg.impl.helper", ("public",)), ("pkg.tools.text", ("text_utils",))}
+
+
+def test_plain_import_of_an_internal_module() -> None:
+    assert resolve_use(
+        {
+            "pkg/__init__.py": "",
+            "pkg/tools/text.py": "def wrap(): ...\n",
+            "pkg/use.py": "import pkg.tools.text\n",
+        }
+    ) == {("pkg.tools.text", ())}
+
+
+def test_names_under_the_codebase_packages_never_become_externals() -> None:
+    edges, externals = link_imports(
+        "lib",
+        parse_files(
+            {
+                "pkg/__init__.py": "",
+                # pkg/migrations/ is excluded, pkg/_native is compiled: neither was walked.
+                "pkg/use.py": "import pkg.migrations.env\nfrom pkg.migrations import env\n"
+                "from pkg._native import fast\nfrom ._native import *\n",
+            }
+        ),
+    )
+
+    assert imports_from(edges, "lib", "pkg.use") == set()
     assert externals == []
