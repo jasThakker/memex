@@ -4,7 +4,7 @@ import argparse
 
 from toolkit import Client
 
-from reporter.formats.table import render_table
+from reporter.formats import table
 
 
 def main() -> None:
@@ -12,4 +12,4 @@ def main() -> None:
     parser.add_argument("title")
     args = parser.parse_args()
     Client().send(args.title)
-    print(render_table([args.title]))
+    print(table.render_table([args.title]))

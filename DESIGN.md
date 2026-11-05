@@ -130,17 +130,21 @@ Framework relationships sit behind one small interface in `memex/ingest/code/ext
 
 ```python
 class Extractor(Protocol):
-    name: str
+    name: ClassVar[str]
 
     def extract(self, modules: Sequence[ParsedModule], symbols: SymbolTable) -> list[Edge]: ...
+
+    def class_properties(
+        self, modules: Sequence[ParsedModule], symbols: SymbolTable
+    ) -> Mapping[str, Mapping[str, str]]: ...  # class id -> {property: value}
 ```
 
-- `ParsedModule` holds a module's `ast` tree, path and qualname.
-- `SymbolTable` is the resolver's read-only lookup: by qualname, by short name, and by class attribute such as `__tablename__`.
-- Extractors only add edges between nodes that already exist. They never create nodes or touch Neo4j.
-- A registry dict maps names to extractor classes; the `extractors` list in `memex.toml` picks which ones run.
+- `ParsedModule` holds a module's `ast` tree, path, qualname and the AST node of each definition.
+- `SymbolTable` is the resolver's read-only lookup: by qualname, by short name, by class attribute such as `__tablename__`, base classes and ancestors, and how a module binds a name.
+- Extractors only add edges between nodes that already exist, plus values for the class properties listed in `CLASS_PROPERTIES` (v1: `tablename`). They never create nodes or touch Neo4j.
+- The registry dict `EXTRACTORS` in `extractors/__init__.py` maps names to extractor classes; the `extractors` list in `memex.toml` picks which ones run. An unknown name is a config error raised by `index_code` before anything is read.
 
-**`sqlalchemy` (built in v1):** `ForeignKey("users.id")` becomes a REFERENCES edge through the `__tablename__` lookup; `relationship("User")` or `relationship(User)` becomes a REFERENCES edge to that class.
+**`sqlalchemy` (built in v1):** only calls that resolve to a name under `sqlalchemy` count, in assignments directly in a class body. `ForeignKey("users.id")` (also schema-qualified, or `ForeignKey(User.id)`) becomes a REFERENCES edge of kind `foreign_key` through the `__tablename__` lookup. `relationship(User)`, `relationship("User")`, a dotted string or `relationship(lambda: User)` becomes one of kind `relationship`. A string is resolved among mapped classes only (a class defining `__tablename__` as a string or a `@declared_attr` method, or one inheriting from such a class or from a `sqlalchemy` base), as the module binds it, then as a dotted name, then as a unique class name. An ambiguous or unknown target gives no edge. A class assigning a string to `__tablename__` gets the `tablename` property.
 
 **`django` (documented, not built):** `models.ForeignKey(User, ...)`, `OneToOneField` and `ManyToManyField`, including string refs like `"auth.User"`, would become REFERENCES with kind `foreign_key`, `one_to_one` or `many_to_many`; `Meta.db_table` feeds the same table lookup. Adding it means one new file, one registry line and a small Django-shaped fixture, with no core changes.
 
@@ -152,7 +156,7 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 
 | Label | Key properties |
 |---|---|
-| `Codebase` | name, root, source, ref, commit, indexed_at, extractors, parse_errors |
+| `Codebase` | name, root, source, ref, commit, indexed_at, extractors, files, parse_errors, unresolved_calls |
 | `Module` | id, codebase, qualname, path, layer, domain, docstring (first line) |
 | `Class` | id, codebase, name, qualname, path, line, end_line, layer, domain, docstring, tablename (when an extractor sets it) |
 | `Function` | id, codebase, name, qualname, path, line, end_line, layer, domain, signature, is_method, is_async, docstring |
@@ -173,9 +177,10 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 ### Neo4j setup
 
 - Uniqueness constraint on `id` for each label.
-- Index on `(codebase, name)` for symbol lookup.
+- Index on `(codebase, name)` for Class, Function and External, and on `(codebase, qualname)` for Module, for symbol lookup.
 - Full-text index `doc_text` on `Doc(heading_path, text)`.
-- Re-index is per codebase: delete every node with that `codebase`, then write in batches with `UNWIND`.
+- Re-index is per codebase and atomic: the batch is validated first (exactly one Codebase node for that codebase, every other id under the `{codebase}:` prefix, no duplicate ids, no dangling edges, no nodes of another codebase), then one write transaction deletes every node with that `codebase` and writes the batch with `UNWIND` in chunks of 1000. A failed re-index keeps the previous graph.
+- Properties set to None are not stored; the model's `Edge.ref_kind` is stored as the REFERENCES property `kind`.
 
 ## 8. Layer and domain classification
 
@@ -198,14 +203,20 @@ The index summary prints the layer and domain distribution so mislabels are visi
 
 ## 9. Call resolution
 
-Best effort, with honest labels. For each call site, in order:
+Best effort, with honest labels. Call sites count when they are inside a function body, including nested defs, lambdas and local classes (decorators and default values are evaluated outside the function and do not count). Each call site sees the names bound in the scopes around it. For each call site, in order:
 
 1. A name defined locally in the module: `exact`.
-2. An imported name (`from x import f`): `exact`.
-3. `self.x` or `cls.x`: the enclosing class, then its in-codebase bases: `exact`.
-4. `alias.x` where `alias` is an imported module: `exact`.
-5. Otherwise, a function or method name that is unique in the codebase: `inferred`.
+2. An imported name (`from x import f`, at module level or inside the function): `exact`. Re-exports are followed, also to a name a codebase module re-exports from outside.
+3. `self.x`, `cls.x`, `cls()`, `super().x`, `super(C, self).x`, `C.x` and `C(...).x` where `C` is a class in the codebase: the class (for `super()`, the bases of the method's class or of `C`), then its in-codebase bases depth first: `exact`. `super()` inside a class nested in a method, or with no enclosing class node, is unresolved.
+4. `alias.x` or `alias.sub.x` where `alias` is an imported module: `exact`.
+5. Otherwise, a function or method name that is unique in the codebase: `inferred`. Never for dunder names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), a `super()` call, or a bare name bound inside the function or by the module (an assignment, or an import the resolver cannot place).
 6. Otherwise, no edge. The unresolved count is recorded per codebase.
+
+- Calling a class runs its `__init__`, found through its bases. A class with no `__init__` in the codebase gives no edge and is not counted as unresolved.
+- A call rooted at a builtin, a literal or a name from outside the codebase (including `super()` reaching an outside base) is external: no edge, not counted.
+- Call sites with the same caller and callee share one edge: the first call site's line, `exact` over `inferred`.
+
+Base classes are resolved as the module binds them before the class binds its own name, so `class Base(Base)` and `class Repo(Repo[int])` inherit from the imported class.
 
 Stretch: store 2 to 3 candidates as `ambiguous` edges, hidden by default and shown with `include_ambiguous=True`.
 
@@ -213,11 +224,11 @@ Known weak spot: calls through attributes whose type is only known at runtime, s
 
 ## 10. MCP tools
 
-Built with FastMCP. All tools are read-only and return Pydantic models. List results carry `truncated: bool`. Results contain locations, signatures and first docstring lines, never source bodies.
+Built with FastMCP. All tools are read-only and return Pydantic models, defined in `memex/query/models.py` and frozen by ADR-001. Models are immutable and reject unknown fields. List results carry `truncated: bool`. Results contain locations, signatures and first docstring lines, never source bodies; code is referred to by qualname.
 
 **Scope rule:** every tool except `list_codebases` takes `codebase: str` as a required argument, validated against the registry. An unknown codebase returns an error listing the registered names. Memex never infers scope.
 
-**Symbol rule:** `symbol` accepts a full qualname or a short name. If a short name matches more than one symbol, the tool returns the candidates instead of guessing.
+**Symbol rule:** `symbol` accepts a full qualname or a short name. If a short name matches more than one symbol, the tool returns `symbol=None` and the candidates instead of guessing; if nothing matches, both are empty.
 
 ```python
 list_codebases() -> CodebaseList
@@ -249,7 +260,7 @@ module_summary(codebase: str, module: str) -> ModuleSummary    # stretch
 ### check_change
 
 - `ChangeProposal`: `description: str`, `symbols: list[str] = []`. Explicit symbols are preferred; if empty, identifiers in the description are matched against the graph.
-- `ChangeCheck`: `resolved_symbols`, `unresolved`, `affected` (an `Impact` summary by layer), `guidelines: list[Guideline]`.
+- `ChangeCheck`: `resolved_symbols`, `ambiguous` (short names matching several symbols, each with its candidates, never guessed), `unresolved`, `affected` (an `Impact` summary by layer), `guidelines: list[Guideline]`.
 - `Guideline`: `stance` (`forbids`, `encourages`, `related`), `quote` (the sentence), `citation` (path, heading_path, start_line, end_line), `matched_on` (`mention`, `search`).
 
 Decision (ADR-002, written in Phase 6): check_change does not call an LLM. It retrieves candidate rules from docs that mention the affected symbols, modules or layers, plus a full-text search on the description, and assigns stance with transparent modal-verb rules (`never`, `do not`, `must not`, `avoid` give `forbids`; `must`, `should`, `always`, `prefer` give `encourages`). The calling agent makes the final judgment. This keeps the server deterministic, testable and cheap, and every claim carries a citation.
@@ -261,7 +272,8 @@ memex/
   config.py                    # load memex.toml into typed Codebase configs
   ingest/
     code/walker.py parser.py resolver.py classify.py
-    code/extractors/base.py    # Extractor Protocol + registry
+    code/extractors/__init__.py  # EXTRACTORS registry
+    code/extractors/base.py    # Extractor Protocol
     code/extractors/sqlalchemy.py
     docs/loader.py chunker.py mentions.py
   graph/model.py               # Node, Edge, GraphBatch (frozen after Phase 3)
@@ -289,7 +301,7 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 - **`layered_app` fixture with known answers.** About 15 files of a generic layered web app, built to cover patterns common in real projects rather than any one repo: domain folders whose names differ by layer (`routes/users/` vs `services/user_services/`), a flat folder of per-domain files (`repos/repository_orders.py`), ORM models with `ForeignKey("users.id")` and `relationship("User")`, an underscore-private folder (`_base`), an injected attribute call (`self.repos.orders.get_one()`), a method name that is not unique, and an external base class. Tests assert exact node sets, edges and confidence labels.
 - **`plainrepo` fixture for generality.** Two packages, no rules, no extractors. Tests assert the default layer and domain behavior, and that no REFERENCES edges exist without an extractor enabled. The classifier is tested with and without rules on the same paths.
 - **Guardrail test** (default run): scans every file in the `memex/` package and fails if the name of any external codebase in `memex.toml` (one with a `source`, so `mealie` and `httpx` but not `memex`) appears in it, case-insensitive, including comments and docstrings.
-- **Unit tests** (no DB, default run, under 2 seconds): parser, resolver, extractors, classifier, chunker, mention linker.
+- **Unit tests** (no DB, default run, about 2 seconds; the fetch-script tests use real git and take most of it): parser, resolver, extractors, classifier, chunker, mention linker, store rows, CLI.
 - **Integration tests** (`-m neo4j`): store round-trip and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
 - **MCP contract tests** (`-m neo4j`): the FastMCP in-memory client calls each tool and checks the schema, codebase validation, ambiguous-name handling and a size budget (JSON under 4 KB at default limits).
 - **Real-repo smoke tests** (`-m realrepo`, opt-in, need `vendor/` fetched). One test file per benchmark repo; the assertions are about that repo, the code under test is not.
@@ -302,8 +314,11 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 Stated openly:
 - Python only.
 - One framework extractor (SQLAlchemy).
-- Name-based call resolution with no type inference.
+- Name-based call resolution with no type inference. Calls through injected attributes (`self.repos.x.get_one()`) whose method name is shared by several classes get no edge.
 - Functions and classes defined inside a function get no node of their own; their code counts as part of the enclosing function.
+- Names are resolved at module scope: a base defined in a class body, a nested class called as `self.Inner()`, `cls(...).m()`, and a later outside import that shadows an earlier local class are not resolved as Python would.
+- An outside name re-exported through a star import of an outside module is not followed.
+- `sqlalchemy`: a `ForeignKey` inside a module-level `Table(...)` (an association table) has no class to start from and gives no edge.
 - Full re-index only; incremental indexing comes later.
 - Doc mentions are found lexically.
 - Guideline stance comes from modal-verb rules, not semantic understanding.

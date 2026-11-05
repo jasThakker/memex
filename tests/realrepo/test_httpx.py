@@ -54,5 +54,20 @@ def test_underscore_private_folders_and_files_get_clean_labels(batch: GraphBatch
 
 
 def test_no_references_without_an_extractor(batch: GraphBatch) -> None:
-    # Trivially true until Phase 3 adds the extractor stage; it guards that stage.
-    assert {edge.kind for edge in batch.edges} == {"DEFINES", "IMPORTS"}
+    # httpx lists no extractors, so the extractor stage must add nothing.
+    kinds = {edge.kind for edge in batch.edges}
+
+    assert "INHERITS" in kinds
+    assert "REFERENCES" not in kinds
+
+
+def test_client_get_calls_client_request(batch: GraphBatch) -> None:
+    # httpx/_client.py: Client.get returns self.request("GET", ...).
+    get = "httpx:httpx._client.Client.get"
+    calls = {
+        (edge.target, edge.confidence)
+        for edge in batch.edges
+        if edge.kind == "CALLS" and edge.source == get
+    }
+
+    assert ("httpx:httpx._client.Client.request", "exact") in calls

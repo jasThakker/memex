@@ -52,6 +52,8 @@ def test_batch_starts_with_the_codebase_node() -> None:
     assert node.root == str(codebase.root)
     assert node.extractors == ("sqlalchemy",)
     assert node.parse_errors == 0
+    assert node.files == 27
+    assert node.unresolved_calls == LAYERED.stats.unresolved_calls == 5
     assert node.indexed_at
 
 
@@ -79,11 +81,11 @@ def test_every_code_node_carries_its_module_labels() -> None:
     assert mismatched == []
 
 
-def test_batch_holds_defines_and_imports_edges_and_externals() -> None:
+def test_batch_holds_every_code_edge_kind_and_externals() -> None:
     kinds = Counter(edge.kind for edge in LAYERED.edges)
     externals = {node.name for node in LAYERED.nodes if isinstance(node, ExternalNode)}
 
-    assert set(kinds) == {"DEFINES", "IMPORTS"}
+    assert set(kinds) == {"DEFINES", "IMPORTS", "INHERITS", "CALLS", "REFERENCES"}
     assert kinds["DEFINES"] == len(by_qualname(LAYERED)) - 27  # one per class or function
     assert "pydantic.BaseModel" in externals
 
@@ -123,11 +125,13 @@ def test_stats_count_files_and_modules_per_layer_and_domain() -> None:
 
 
 def test_plainrepo_has_no_references_without_an_extractor() -> None:
-    # Trivially true until Phase 3 adds the extractor stage; it guards that stage.
+    # plainrepo lists no extractors; test_extractors.py checks the same with layered_app.
     batch = index_code(REGISTRY.get("plainrepo"))
+    kinds = {edge.kind for edge in batch.edges}
 
     assert batch.stats.files == 10
-    assert {edge.kind for edge in batch.edges} == {"DEFINES", "IMPORTS"}
+    assert "INHERITS" in kinds
+    assert "REFERENCES" not in kinds
 
 
 def test_a_file_that_fails_to_parse_is_counted_and_the_rest_is_indexed(tmp_path: Path) -> None:

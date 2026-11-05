@@ -41,7 +41,9 @@ class CodebaseNode:
     ref: str | None = None
     commit: str | None = None
     extractors: tuple[str, ...] = ()
+    files: int = 0
     parse_errors: int = 0
+    unresolved_calls: int = 0
 
 
 @dataclass(frozen=True, kw_only=True)
