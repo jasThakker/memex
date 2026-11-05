@@ -350,6 +350,7 @@ Stated openly:
 - Python only.
 - One framework extractor (SQLAlchemy).
 - Name-based call resolution with no type inference. Calls through injected attributes (`self.repos.x.get_one()`) whose method name is shared by several classes get no edge.
+- Local names are not typed either: `with Client(...) as client: client.request()` and `client = Client(); client.request()` give no edge when the method name is shared (found in the Phase 5 live check: httpx's module-level `request()` is not a caller of `Client.request`).
 - Functions and classes defined inside a function get no node of their own; their code counts as part of the enclosing function.
 - Names are resolved at module scope: a base defined in a class body, a nested class called as `self.Inner()`, `cls(...).m()`, and a later outside import that shadows an earlier local class are not resolved as Python would.
 - An outside name re-exported through a star import of an outside module is not followed.

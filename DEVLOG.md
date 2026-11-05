@@ -319,3 +319,78 @@ Slices: (1) chunker, (2) loader and kinds, (3) mention linker, (4) `index_codeba
 - Carry to Phase 6 (`check_change`): guideline retrieval should not rely on MENTIONS alone, because names inside call spans (`Depends(generate_session)`) are not linked; measure in the Phase 7 eval whether that costs q09 before widening the mention rule.
 - `vendor/` was fetched separately into the worktree for the realrepo tests; it can be deleted with the worktree.
 - No subagent to run before Phase 6. The reviewer runs inside Phase 6 after the slice groups its plan names; Claude gives the exact prompt each time.
+
+## Phase 5: Query + MCP (2026-11-05)
+
+**Goal:** Build the read side agents use: `list_codebases`, `find_symbol`, `callers`, `callees`, `impact_of` and `search_docs` in `memex/query/`, a thin FastMCP server over them, `memex serve` and `.mcp.json`, so a Claude Code session can ask what depends on a symbol and get compact, cited structure instead of grepping. Built on `phase-5-tools` in the main checkout, in parallel with Phase 4 in the worktree `../memex-docs`.
+
+**Approved plan** (written in plan mode before any code; `/Users/jasthakker/.claude/plans/start-phase-5-declarative-teacup.md`):
+
+Decisions:
+- `fastmcp` dependency; MCP tests use the in-memory client through `asyncio.run`, no `pytest-asyncio`.
+- Query functions take `(driver, codebase, ...)`, hold all Cypher and the range checks (`limit` 1 to 200, depth 1 to 5) and raise `ValueError`.
+- Scope check in `query/scope.py` (`UnknownCodebaseError` or the new `NotIndexedError`), run by the server before every tool except `list_codebases`.
+- Symbol rule: exact qualname wins, else qualnames ending in the given dotted segments; several matches are candidates, never a guess.
+- `find_symbol` ranks exact qualname, then suffix, then a case-insensitive substring of the last segment.
+- `callers`/`callees`: breadth first, one query per level, shortest distance; a class stands for its own `__init__`.
+- `impact_of`: start set is the symbol plus everything it DEFINES; reverse CALLS, INHERITS, REFERENCES, IMPORTS; modules are leaves; grouped by layer; `total` before truncation; up to 5 docs.
+- `search_docs`: `doc_text` index, Lucene syntax escaped, snippets of at most 200 characters.
+- Size budget: DESIGN's defaults (20/50/100/10) could not fit its own 4 KB budget (about 280 B per dependent), so the defaults were lowered to fit (my choice): find_symbol 10, callers/callees 12, impact_of 12 (8 after measuring Mealie), search_docs 5.
+- `build_server(driver, registry)` with one wrapper per tool and no logic; `memex serve` on stdio.
+
+Slices: (1) list_codebases + scope check, (2) resolve_symbol + find_symbol, (3) callers + callees, then reviewer run 1, (4) impact_of, (5) search_docs, (6) MCP server + `memex serve`, (7) merge `main` (Phase 4), real-repo tool tests, `.mcp.json`, README, DESIGN, reviewer run 2, live check. Built as planned, with one fix commit after each reviewer run.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | Slices 1 to 3 against DESIGN sections 4 and 10 and plan decisions 2 to 6 and 9; focus on symbol edge cases, ranking and truncation, the BFS, the class-to-`__init__` rule, Cypher parameters, weak tests | 3 medium and 4 low findings plus 7 weak tests; about 46k subagent tokens, 2.3 minutes | Fixed 1, 2, 4, 5, 6 and all weak tests in "Address reviewer run 1"; documented 3 (DESIGN section 13 and the `callers` description); deferred 7 (timed in slice 7) |
+| reviewer (run 2) | End of phase: run 1 fixes and slices 4 to 7 against DESIGN sections 4, 10 to 13 and plan decisions 7 to 11; Phase 4 code out of scope | 2 medium and 5 low findings plus 9 weak tests, none high; about 99k subagent tokens, 6.3 minutes | Fixed all 7 and 5 of the weak tests in "Address reviewer run 2"; left 4 weak tests with reasons (schema types already frozen by `contract_schema.json`, writes guarded by READ routing, fixture too small for the budget, one shared scope wrapper) |
+
+**What the reviewer caught that Claude had missed:**
+- Run 1: `resolve_symbol` returned every candidate with no cap: `__init__` alone gave 140 candidates in Mealie (about 21 KB) and `get_one` 31, far past the budget.
+- Run 1: a recursive function never appeared as its own caller or callee (13 such edges in Mealie, 2 in httpx).
+- Run 1: `list_codebases` listed indexed codebases that were no longer registered, which every other tool would reject.
+- Run 1, tests: exact-versus-suffix, one short name of two kinds, `find_symbol` tier 0, truncation at a deeper level and at exactly the limit were all untested.
+- Run 2: snippets matched substrings (`orm` landed in "Information" and missed the real word); a cut already on a space dropped a word that fitted.
+- Run 2: impact docs listed every symbol a section mentions, not only related ones; DESIGN said docs on the symbol come first while the code ranked any start-set member first; a pasted page as a query could hit Lucene's clause cap as a raw Neo4j error; the impact step query had no label and could not use the id index.
+- Claude reproduced the medium findings of both runs on the real repos (Mealie and httpx batches, or a direct snippet call) before the decision; all reproduced.
+
+**What went wrong:**
+- The first size test measured `json.dumps` with spaces, not the compact JSON text the agent receives (4,203 B against 3,900 B on the wire). Fixed to measure the wire text; the margin was still thin, which the Mealie measurement then confirmed.
+- On Mealie, `impact_of` at limit 12 reached 4,878 B (`AllRepositories`); the default became 8 (worst seen 3,698 B), as the plan allowed.
+- Claude twice inserted a new test between a `@pytest.mark.parametrize` decorator and its function, which broke test collection until it moved the decorator back.
+- Two test expectations were wrong as first written: the doc cap made `impact_of` truncated at the default depth, and ordering docs by path alone would have dropped the doc on the symbol itself. Both caught before commit.
+- The first word-drop snippet test passed on the buggy code (equal-width words never put a cut on a space); rewritten as a property over several word widths, which then failed red.
+- The slice 6 commit failed once: `git add` named the old path of the conftest rename, which was already staged.
+- The resumed session could not use the `memex` tools after the restart (the server was connected, the tools never reached this conversation), so the live check ran in a fresh session. That is the fairer test anyway: it knew nothing about how the tools were built.
+- Edits made through scripts bypassed the hook, so Claude ran ruff and regenerated the HTML views by hand, as in Phase 3.
+
+**What I changed (human edits and overrides):**
+- Chose to keep the 4 KB budget and lower the default limits rather than raise the budget.
+- Approved the `tests/conftest.py` move, the doc ranking rule (docs on the symbol first) and one `truncated` flag covering dependents and docs.
+- Accepted Claude's fix, document or defer split for both reviewer runs.
+- Ran the live check myself in a fresh session: "In mealie, what depends on RecipeModel?" and "In httpx, what calls Client.request?" Both were answered through the tools; the second also found a missing caller by grepping (see below).
+- Questions I asked along the way: whether plan mode had already been done for both phases, how my approval could start Phase 5 and still run Phase 4 in parallel, what Claude needed from me, whether the tests were failing on purpose (red before the code exists), how many slices there were, how the files under review get into the test container (they do not: only graph data goes into it), how many commits the project has, whether Phases 6 and 7 can run in parallel, what Phase 6 is about, and whether I could close the Phase 4 window.
+
+**Known limits** (documented in DESIGN section 13, not fixed):
+- Local names are not typed: httpx's module-level `request()` (`with Client(...) as client: client.request()`) is not a caller of `Client.request`, so `httpx.get()` and friends are missing from its callers. Found in the live check.
+- `callers` of a class that only inherits `__init__` is empty (calls are stored on the base's `__init__`).
+- Symbol lookup filters on qualname suffixes without an index; under 400 ms per tool call on Mealie, MCP round trip included.
+- The 4 KB budget is measured, not bounded: `callers` of `AllRepositories.__init__` is 3,955 B at its default, and a repo with longer qualnames could exceed it.
+
+**Decisions / ADRs:** No ADR: `graph/model.py` and `query/models.py` are unchanged. Default limits differ from the Phase 0 DESIGN (find_symbol 10, callers/callees 12, impact_of 8, search_docs 5); DESIGN sections 10, 11, 12 and 13 updated to the code as built, and the CLAUDE.md test commands split `-m "neo4j and not realrepo"` from the real-repo tests.
+
+**Numbers:**
+- 11 commits on `phase-5-tools` (7 slice commits, 2 reviewer fix commits, the merge of `main` with Phase 4, this entry); 55 commits on the branch in total.
+- Tests: 300 unit in about 3 s; 162 Neo4j in about 31 s (container included), of which 21 are real-repo tool tests; 17 real-repo batch smoke tests.
+- Dev database after the merge: Mealie 415 files, 3,195 code nodes plus 247 Docs, CALLS 1,805, REFERENCES 253, MENTIONS 23, indexed in 3.4 s; httpx 23 files, 121 Docs, CALLS 353, MENTIONS 36, 0 REFERENCES, 0.5 s.
+- Sizes on Mealie at default limits (wire JSON): list_codebases 468 B, find_symbol 2,383 B, callers 2,569 to 3,955 B, callees 637 B, impact_of up to 3,698 B, search_docs 2,234 B.
+- `impact_of RecipeModel`: 127 dependents within depth 3, the extractor's REFERENCES among them, all in `db_models`.
+- Reviewer: 2 runs, about 145k subagent tokens in total.
+
+**Next:**
+- Merge `phase-5-tools` into `main` with `--no-ff` (keep the branch). Optionally remove the Phase 4 worktree with `git worktree remove ../memex-docs` (the branch stays).
+- Phase 6 (check_change, DESIGN section 10 and 15) on `phase-6-check-change` from `main`, then Phase 7. Claude recommends running them one after the other: the eval has 2 check_change questions, and the workflow allows only the one worktree split.
+- Open questions for the Phase 6 plan: how identifiers are pulled from a description without matching common words (reuse `resolve_symbol` and its candidates for `AmbiguousName`); how a Doc section is split into sentences for `quote`; negation in the modal-verb rules ("you don't need to avoid"); combining MENTIONS with full-text search, since names inside call spans are not linked (q09); whether `affected` reuses the `impact_of` walk through a shared helper; the size budget for `ChangeCheck`; ADR-002.
+- Carry to Phase 7: measure in the eval how often the call-graph gaps cost an answer (shared method names, untyped locals like httpx `request()`) before adding the `ambiguous` tier or local typing.
+- No subagent to run before Phase 6. The reviewer runs inside Phase 6 after the slice groups its plan names; Claude gives the exact prompt each time.
