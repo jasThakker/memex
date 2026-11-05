@@ -86,3 +86,24 @@ def test_index_docs_passes_on_parse_errors(tmp_path: Path) -> None:
     assert result.nodes == ()
     assert [error.path for error in result.parse_errors] == ["bad.md"]
     assert isinstance(result.parse_errors[0], ParseError)
+
+
+def test_a_docs_glob_outside_the_root_is_a_config_error() -> None:
+    codebase = LAYERED_APP.model_copy(update={"docs": ("../plainrepo/*.md",)})
+    with pytest.raises(ConfigError, match="outside the codebase root"):
+        load_docs(codebase)
+
+
+def test_an_unreadable_doc_is_recorded_and_skipped(tmp_path: Path) -> None:
+    (tmp_path / "good.md").write_text("# Good\n", encoding="utf-8")
+    locked = tmp_path / "locked.md"
+    locked.write_text("# Locked\n", encoding="utf-8")
+    locked.chmod(0)
+    codebase = Codebase(name="tmp", root=tmp_path, packages=("pkg",), docs=("*.md",))
+    try:
+        files, errors = load_docs(codebase)
+    finally:
+        locked.chmod(0o644)
+    assert [f.path for f in files] == ["good.md"]
+    assert [(e.path, e.line) for e in errors] == [("locked.md", None)]
+    assert "cannot read" in errors[0].message

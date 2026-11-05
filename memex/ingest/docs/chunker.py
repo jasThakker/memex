@@ -1,27 +1,34 @@
 """Split a Markdown file into one chunk per heading.
 
 A line-based reader for the CommonMark block rules that decide what is a heading: ATX
-headings (`# Title`, up to three leading spaces), setext headings (a paragraph line underlined
-with `===` or `---`), and the places a heading cannot be: fenced code (``` or ~~~), indented
-code, and YAML front matter at the top of the file. Each heading starts a chunk that runs to
-the next heading of any level. Text before the first heading is a chunk with an empty anchor.
+headings (`# Title`, up to three leading spaces), setext headings (a paragraph underlined with
+`===` or `---`, unless it starts with a list item, quote, table row or HTML), and the places a
+heading cannot be: fenced code (``` or ~~~), indented code, HTML comments and YAML front
+matter at the top of the file. Each heading starts a chunk that runs to the next heading of
+any level. Text before the first heading is a chunk with an empty anchor.
 
-Anchors are the heading's plain text (links reduced to their visible text, code and emphasis
-markers dropped); a heading repeated in one file gets ` (2)`, ` (3)` in its anchor only.
-Line numbers are 1-based.
+Anchors are the heading's plain text (links reduced to their visible text; code and emphasis
+markers and inline HTML dropped); a heading repeated in one file gets ` (2)`, ` (3)` in its
+anchor only.
+Line numbers are 1-based, and only `\n`, `\r\n` and `\r` end a line.
 """
 
 import re
 from dataclasses import dataclass
 
 _ATX = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*))?$")
-_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_FENCE = re.compile(r"^ {0,3}(?:(`{3,})(?!.*`)|(~{3,}))")  # no backtick after a ``` opener
 _SETEXT = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 _THEMATIC_BREAK = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")
-_NOT_SETEXT_TEXT = re.compile(r"^ {0,3}(?:[-*+][ \t]|\d+[.)][ \t]|>|\|)")  # list, quote, table
+# A paragraph starting with a list item, quote, table row or HTML never becomes a heading
+_NOT_SETEXT_TEXT = re.compile(r"^ {0,3}(?:[-*+][ \t]|\d+[.)][ \t]|>|\||<)")
+_COMMENT_START = re.compile(r"^ {0,3}<!--")
+_NEWLINE = re.compile(r"\r\n|\r|\n")
 
 _CLOSING_HASHES = re.compile(r"(?:^|[ \t]+)#+[ \t]*$")
 _IMAGE_OR_LINK = re.compile(r"!?\[([^\]]*)\](?:\([^)]*\)|\[[^\]]*\])")
+_SHORTCUT_LINK = re.compile(r"!?\[([^\]]*)\](?![(\[])")
+_HTML_TAG = re.compile(r"</?[A-Za-z][^<>]*>")
 _CODE_SPAN = re.compile(r"(`+)(.+?)\1")
 _EMPHASIS = (
     re.compile(r"\*\*(.+?)\*\*"),
@@ -42,14 +49,20 @@ class Chunk:
 
 @dataclass(frozen=True)
 class _Heading:
-    first: int  # 0-based index of the heading text line
+    first: int  # 0-based index of the heading's first line
     last: int  # 0-based index of its last line (the underline, for setext)
     level: int
     raw: str
 
 
+def split_lines(text: str) -> list[str]:
+    """Lines as an editor numbers them: only `\n`, `\r\n` and `\r` end a line."""
+    lines = _NEWLINE.split(text)
+    return lines[:-1] if lines[-1] == "" else lines
+
+
 def chunk(text: str) -> list[Chunk]:
-    lines = text.splitlines()
+    lines = split_lines(text)
     start = _body_start(lines)
     headings = _headings(lines, start)
 
@@ -86,10 +99,10 @@ def plain_heading(raw: str) -> str:
     parts: list[str] = []
     position = 0
     for match in _CODE_SPAN.finditer(text):
-        parts.append(_without_emphasis(text[position : match.start()]))
+        parts.append(_prose(text[position : match.start()]))
         parts.append(match.group(2))
         position = match.end()
-    parts.append(_without_emphasis(text[position:]))
+    parts.append(_prose(text[position:]))
     return " ".join("".join(parts).split())
 
 
@@ -97,13 +110,13 @@ def outside_fences(text: str) -> str:
     """The text with every line of fenced code, fence lines included, blanked out."""
     kept: list[str] = []
     fence: str | None = None
-    for line in text.splitlines():
+    for line in split_lines(text):
         if fence is not None:
             if _closes(fence, line):
                 fence = None
             kept.append("")
         elif match := _FENCE.match(line):
-            fence = match.group(1)
+            fence = match.group(1) or match.group(2)
             kept.append("")
         else:
             kept.append(line)
@@ -111,12 +124,16 @@ def outside_fences(text: str) -> str:
 
 
 def _closes(fence: str, line: str) -> bool:
-    """A closing fence: at least as many of the same character, and nothing else."""
+    """A closing fence: at most 3 spaces of indent, at least as many of the same character,
+    and nothing else."""
     stripped = line.strip()
-    return stripped.startswith(fence) and set(stripped) == {fence[0]}
+    return _indent(line) <= 3 and stripped.startswith(fence) and set(stripped) == {fence[0]}
 
 
-def _without_emphasis(text: str) -> str:
+def _prose(text: str) -> str:
+    """Heading text outside code spans: shortcut links and inline HTML reduced, emphasis
+    markers dropped."""
+    text = _HTML_TAG.sub("", _SHORTCUT_LINK.sub(r"\1", text))
     for pattern in _EMPHASIS:
         text = pattern.sub(r"\1", text)
     return text
@@ -135,7 +152,9 @@ def _body_start(lines: list[str]) -> int:
 def _headings(lines: list[str], start: int) -> list[_Heading]:
     headings: list[_Heading] = []
     fence: str | None = None
+    in_comment = False
     in_paragraph = False
+    paragraph_start = 0
     paragraph_can_be_heading = False
     for index in range(start, len(lines)):
         line = lines[index]
@@ -143,8 +162,15 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
             if _closes(fence, line):
                 fence = None
             continue
+        if in_comment:
+            in_comment = "-->" not in line
+            continue
         if match := _FENCE.match(line):
-            fence = match.group(1)
+            fence = match.group(1) or match.group(2)
+            in_paragraph = False
+            continue
+        if _COMMENT_START.match(line):
+            in_comment = "-->" not in line.split("<!--", 1)[1]
             in_paragraph = False
             continue
         if not line.strip():
@@ -152,7 +178,8 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
             continue
         if in_paragraph and paragraph_can_be_heading and _SETEXT.match(line):
             level = 1 if line.strip().startswith("=") else 2
-            headings.append(_Heading(index - 1, index, level, lines[index - 1]))
+            raw = " ".join(lines[paragraph_start:index])
+            headings.append(_Heading(paragraph_start, index, level, raw))
             in_paragraph = False
             continue
         if _THEMATIC_BREAK.match(line):
@@ -164,8 +191,10 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
             headings.append(_Heading(index, index, len(match.group(1)), match.group(2) or ""))
             in_paragraph = False
             continue
-        in_paragraph = True
-        paragraph_can_be_heading = not _NOT_SETEXT_TEXT.match(line)
+        if not in_paragraph:
+            in_paragraph = True
+            paragraph_start = index
+            paragraph_can_be_heading = not _NOT_SETEXT_TEXT.match(line)
     return headings
 
 

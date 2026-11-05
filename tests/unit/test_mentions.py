@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from memex.config import load_config
-from memex.graph.model import Edge
+from memex.graph.model import ClassNode, Edge, FunctionNode
 from memex.ingest.code import index_code
 from memex.ingest.docs import index_docs
 from memex.ingest.docs.mentions import MentionTargets, link_mentions
@@ -35,7 +35,7 @@ def test_layered_app_docs_mention_exactly_the_symbols_they_name() -> None:
         ("AGENTS.md#Layers", "app.routes", "path"),  # a package directory, trailing slash
         ("AGENTS.md#Layers", "app._base.service.BaseService", "backtick_name"),
         ("AGENTS.md#Layers", "app.repos.repository_factory.AllRepositories", "backtick_name"),
-        # not linked in Layers: `get_one` (two methods), `get` (a builtin type method),
+        # not linked in Layers: `get_one` (a bare method name), `get` (a builtin type method),
         # `__init__` (dunder), `dict` (a builtin)
         ("AGENTS.md#Database", "app.db.models", "path"),
         ("AGENTS.md#Database", "app.db.models._model_base.SqlAlchemyBase", "qualname"),
@@ -118,4 +118,69 @@ def test_double_backtick_span_and_leading_dot_slash() -> None:
     assert linked("``BaseService`` in ./app/_base/service.py") == [
         ("app._base.service", "path"),
         ("app._base.service.BaseService", "backtick_name"),
+    ]
+
+
+def test_a_top_level_package_directory_is_a_path() -> None:
+    assert linked("All code lives in `app/`.") == [("app", "path")]
+    assert linked("All code lives in app/.") == [("app", "path")]
+
+
+def function(qualname: str, is_method: bool = False) -> FunctionNode:
+    return FunctionNode(
+        id=f"lib:{qualname}",
+        codebase="lib",
+        name=qualname.rsplit(".", 1)[1],
+        qualname=qualname,
+        path="lib/x.py",
+        line=1,
+        end_line=1,
+        signature="()",
+        is_method=is_method,
+        is_async=False,
+    )
+
+
+def klass(qualname: str) -> ClassNode:
+    name = qualname.rsplit(".", 1)[1]
+    return ClassNode(
+        id=f"lib:{qualname}", codebase="lib", name=name, qualname=qualname, path="lib/x.py",
+        line=1, end_line=1,
+    )  # fmt: skip
+
+
+# Module-level names that collide with common words, and names shared by two symbols
+LIB = MentionTargets(
+    [
+        function("lib.util.get"),  # a builtin type method name
+        klass("lib.util.dict"),  # a builtin
+        function("lib.util.match"),  # a soft keyword
+        function("lib.util.__getattr__"),  # a dunder
+        function("lib.a.run"),
+        function("lib.b.run"),  # `run` is ambiguous
+        klass("lib.a.Worker"),
+        function("lib.a.Worker.start", is_method=True),
+        klass("lib.b.Worker"),
+        function("lib.b.Worker.start", is_method=True),  # `Worker.start` is ambiguous
+        function("lib.util.unique_helper"),
+    ]
+)
+
+
+def lib_linked(text: str) -> list[str]:
+    return [edge.target.removeprefix("lib:") for edge in link_mentions("lib:doc:x#", text, LIB)]
+
+
+@pytest.mark.parametrize(
+    "span", ["`get`", "`dict`", "`match`", "`__getattr__`", "`run`", "`Worker`", "`Worker.start`"]
+)
+def test_common_or_ambiguous_names_give_no_edge(span: str) -> None:
+    assert lib_linked(span) == []
+
+
+def test_unique_names_and_suffixes_link() -> None:
+    assert lib_linked("`unique_helper()` and `a.Worker.start` and `b.run`") == [
+        "lib.a.Worker.start",
+        "lib.b.run",
+        "lib.util.unique_helper",
     ]

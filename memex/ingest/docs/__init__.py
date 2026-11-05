@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from memex.config import Codebase
 from memex.graph.model import DocNode, Edge, Node, ParseError, doc_id
-from memex.ingest.docs.chunker import chunk
+from memex.ingest.docs.chunker import chunk, split_lines
 from memex.ingest.docs.loader import load_docs
 from memex.ingest.docs.mentions import MentionTargets, link_mentions
 
@@ -26,7 +26,7 @@ def index_docs(codebase: Codebase, code_nodes: Sequence[Node]) -> DocIndex:
     nodes: list[DocNode] = []
     edges: list[Edge] = []
     for file in files:
-        lines = file.text.splitlines()
+        lines = split_lines(file.text)
         for piece in chunk(file.text):
             node = DocNode(
                 id=doc_id(codebase.name, file.path, piece.anchor),

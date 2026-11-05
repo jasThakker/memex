@@ -4,7 +4,7 @@ Three kinds of match, strongest first; a chunk gets one edge per target, with it
 - `qualname`: a whole dotted name (`pkg.mod.Class`) equal to a Module, Class or Function
   qualname, anywhere in the text, code fences included.
 - `path`: a path relative to the codebase root that names a module file (`pkg/mod.py`) or a
-  package directory (`pkg/sub` or `pkg/sub/`). Globs and URLs are skipped.
+  package directory (`pkg/sub`, `pkg/sub/` or a top-level `pkg/`). Globs and URLs are skipped.
 - `backtick_name`: an inline code span outside fences holding a name, optionally with `()`.
   A bare name links only if exactly one Class or module-level Function has it and it is not
   a dunder, a keyword, a builtin or a builtin type method name. Methods need the dotted form
@@ -25,7 +25,8 @@ from memex.ingest.code.resolver import _BUILTIN_METHOD_NAMES
 from memex.ingest.docs.chunker import outside_fences
 
 _QUALNAME = re.compile(r"(?<![\w./])[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")
-_PATH = re.compile(r"(?<![\w./:-])(?:\./)?[\w*?-][\w.*?-]*(?:/[\w.*?-]+)+/?")
+# two or more segments (`pkg/mod.py`, `pkg/sub/`), or one ending in a slash (`pkg/`)
+_PATH = re.compile(r"(?<![\w./:-])(?:\./)?[\w*?-][\w.*?-]*(?:(?:/[\w.*?-]+)+/?|/)")
 _CODE_SPAN = re.compile(r"(`+)([^`\n]+?)\1(?!`)")
 _NAME = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
 _RANK: dict[MentionMatch, int] = {"qualname": 0, "path": 1, "backtick_name": 2}

@@ -120,3 +120,72 @@ def test_repeated_anchor_skips_a_counter_that_is_already_a_heading() -> None:
 )
 def test_plain_heading(raw: str, plain: str) -> None:
     assert plain_heading(raw) == plain
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- first item\n  wraps here\n---\n",  # a wrapped list item, then a rule
+        "> quote\nlazy line\n---\n",  # a lazy quote continuation, then a rule
+        "- item\n---\n",
+        "> q\n---\n",
+        "| a | b |\n---\n",
+        '<div align="center">\n<img src=x>\n</div>\n---\n',  # HTML, then a rule
+        "<!--\n## Old section\nstale text\n-->\n",  # commented out
+        "para\n***\n",  # a thematic break ends the paragraph; `***` is never setext
+        "```\n    ```\n# Not a heading\n```\n",  # 4 spaces: not a closing fence
+        "````\n```\n# x\n````\n",  # a shorter fence does not close a longer one
+        "para\n    # x\n",  # paragraph continuation, not indented code or a heading
+    ],
+)
+def test_not_a_heading(text: str) -> None:
+    assert [c.anchor for c in chunk(text)] == [""]
+
+
+def test_an_unclosed_front_matter_is_ordinary_text() -> None:
+    assert [c.anchor for c in chunk("---\ntitle: x\n# Real\n")] == ["", "Real"]
+
+
+def test_a_backtick_line_with_a_backtick_in_its_info_string_is_not_a_fence() -> None:
+    assert [c.anchor for c in chunk("```pip install foo```\n\n## Next\n")] == ["", "Next"]
+
+
+def test_headings_after_an_html_comment_are_found() -> None:
+    assert [c.anchor for c in chunk("<!--\nnote\nend -->\n# After\n")] == ["", "After"]
+
+
+def test_a_setext_heading_takes_its_whole_paragraph() -> None:
+    assert chunk("Intro line one\nline two\n---\nbody\n") == [
+        Chunk(
+            anchor="Intro line one line two",
+            heading_path="Intro line one line two",
+            text="body",
+            start_line=1,
+            end_line=4,
+        )
+    ]
+
+
+@pytest.mark.parametrize("separator", ["\x0c", "\x0b", "\x85", " "])
+def test_only_newlines_end_a_line(separator: str) -> None:
+    chunks = chunk(f"a{separator}b\n# H\n")
+    assert [(c.anchor, c.start_line) for c in chunks] == [("", 1), ("H", 2)]
+    assert chunks[0].text == f"a{separator}b"
+
+
+@pytest.mark.parametrize(
+    ("raw", "plain"),
+    [
+        ('Installation <a name="install"></a>', "Installation"),
+        ("Line <br/> break", "Line break"),
+        ("`Map<K, V>` types", "Map<K, V> types"),  # code span content is literal
+        ("Use [Config] here", "Use Config here"),  # shortcut reference link
+    ],
+)
+def test_plain_heading_drops_inline_html_and_shortcut_links(raw: str, plain: str) -> None:
+    assert plain_heading(raw) == plain
+
+
+@pytest.mark.parametrize("text", ["para\n***\nnext\n---\n", "para\n\n---\nnext\n===\n"])
+def test_a_thematic_break_ends_the_paragraph_before_a_setext_heading(text: str) -> None:
+    assert [c.anchor for c in chunk(text)] == ["", "next"]
