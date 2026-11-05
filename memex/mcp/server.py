@@ -112,7 +112,8 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         """Check a proposed change before making it. `proposal.description` says what will
         change (plain text, at most 500 characters); `proposal.symbols` optionally names the
         symbols, otherwise code-shaped names in the description are used. Returns the
-        resolved, ambiguous and unresolved names, how many dependents each layer has, and up
+        resolved, ambiguous and unresolved names (an ambiguous name with no candidates listed
+        has more than fit: call find_symbol for it), how many dependents each layer has, and up
         to 6 documented rules: one sentence each with its stance (forbids, encourages or
         related, from modal verbs only), path, heading and line range, found because the
         section mentions the changed code or by a search on the description. The stance is a

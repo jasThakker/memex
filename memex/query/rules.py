@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 from typing import Literal
 
-from memex.ingest.docs.chunker import outside_fences
+from memex.ingest.docs.chunker import outside_fences, split_lines
 
 Stance = Literal["forbids", "encourages", "related"]
 
@@ -30,9 +30,10 @@ _FILE_SUFFIXES = frozenset(
 _QUOTE_MARKER = re.compile(r"^\s*(?:>\s?)+")
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
 _TABLE_SEPARATOR = re.compile(r"^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
-# A break after . ! or ? when the next sentence starts with a capital or a code span,
-# possibly behind emphasis, a link bracket, a quote or a parenthesis.
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[*_\[\"'(]*[A-Z`])")
+# A break after . ! or ? (possibly inside closing emphasis, a quote, a parenthesis or a
+# bracket) when the next sentence starts with a capital or a code span, possibly behind
+# emphasis, a link bracket, a quote or a parenthesis.
+_SENTENCE_BREAK = re.compile(r"[.!?][*_\"')\]]*\s+(?=[*_\[\"'(]*[A-Z`])")
 _ABBREVIATIONS = ("e.g.", "i.e.")
 
 _EMPHASIS = re.compile(r"\*+|(?<!\w)_+|_+(?!\w)")
@@ -57,24 +58,39 @@ class Sentence:
 def code_tokens(description: str) -> list[str]:
     """Distinct code-shaped names in order of appearance: a backtick span holding a dotted
     name (a trailing `()` dropped), and elsewhere, also inside other spans, dotted names whose
-    segments are at least two characters long, names with an underscore, and CamelCase names.
-    File names, hosts (`main.py`, `github.com`) and acronym plurals (`APIs`) are skipped."""
+    segments are at least two characters long, names with an inner underscore, dunder names
+    and CamelCase names. File names, hosts (`main.py`, `github.com`) and acronym plurals
+    (`APIs`) are skipped, in spans too."""
     found: list[tuple[int, str]] = []
     masked = description
     for match in _SPAN.finditer(description):
         name = match.group(1).strip().removesuffix("()")
         if _DOTTED.fullmatch(name):
-            found.append((match.start(), name))
             masked = masked[: match.start()] + " " * len(match.group()) + masked[match.end() :]
+            if not _is_file_or_acronym(name):
+                found.append((match.start(), name))
     for match in _NAME.finditer(masked):
         name = match.group()
+        if _is_file_or_acronym(name):
+            continue
         if "." in name:
-            segments = name.split(".")
-            if all(len(s) >= 2 for s in segments) and segments[-1] not in _FILE_SUFFIXES:
+            if all(len(segment) >= 2 for segment in name.split(".")):
                 found.append((match.start(), name))
-        elif not _ACRONYM_PLURAL.fullmatch(name) and ("_" in name or _CAMEL.search(name)):
+        elif "_" in name.strip("_") or _is_dunder(name) or _CAMEL.search(name):
             found.append((match.start(), name))
     return list(dict.fromkeys(name for _, name in sorted(found)))
+
+
+def _is_file_or_acronym(name: str) -> bool:
+    return (
+        name.rsplit(".", 1)[-1] in _FILE_SUFFIXES
+        if "." in name
+        else bool(_ACRONYM_PLURAL.fullmatch(name))
+    )
+
+
+def _is_dunder(name: str) -> bool:
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
 
 
 def section_sentences(text: str, end_line: int) -> list[Sentence]:
@@ -86,12 +102,11 @@ def section_sentences(text: str, end_line: int) -> list[Sentence]:
 
 
 def sentences(text: str, first_line: int) -> list[Sentence]:
-    """The sentences of a section body whose first line is `first_line`. Fenced code is
-    skipped and blockquote markers dropped. A blank line, a list item or a table row starts
-    a new unit (a table is found by its separator row, with or without outer pipes, and
-    ends at a blank line or a list item). A unit
-    is split after `.`, `!` or `?` followed by a sentence start (see _SENTENCE_BREAK),
-    except after `e.g.` and `i.e.`."""
+    """The sentences of a section body whose first line is `first_line`. Blockquote markers
+    are dropped and fenced code is skipped, also inside a blockquote. A blank line, a list
+    item or a table row starts a new unit (a table is found by its separator row, with or
+    without outer pipes, and ends at a blank line or a list item). A unit is split at
+    _SENTENCE_BREAK, except after `e.g.` and `i.e.`."""
     units: list[list[tuple[int, str]]] = []
     current: list[tuple[int, str]] = []
     in_table = False
@@ -102,9 +117,9 @@ def sentences(text: str, first_line: int) -> list[Sentence]:
             units.append(current)
         current = []
 
-    for offset, raw in enumerate(outside_fences(text).split("\n")):
+    unquoted = "\n".join(_QUOTE_MARKER.sub("", line) for line in split_lines(text))
+    for offset, line in enumerate(outside_fences(unquoted).split("\n")):
         number = first_line + offset
-        line = _QUOTE_MARKER.sub("", raw)
         stripped = line.strip()
         if not stripped:
             close()
@@ -138,7 +153,7 @@ def _split(unit: list[tuple[int, str]]) -> list[Sentence]:
         joined += content + " "
     cuts = [0]
     for match in _SENTENCE_BREAK.finditer(joined):
-        if not joined[: match.start()].lower().endswith(_ABBREVIATIONS):
+        if not joined[: match.start() + 1].lower().endswith(_ABBREVIATIONS):
             cuts.append(match.end())
     cuts.append(len(joined))
 

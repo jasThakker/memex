@@ -1,19 +1,22 @@
 """check_change (DESIGN.md section 10, ADR-002): which code a proposed change affects and
 which documented rules apply. No LLM: the calling agent makes the final judgment.
 
-- Symbols: the proposal's explicit `symbols` (stripped, empty ones skipped), or else the
+- Symbols: the proposal's explicit `symbols` (stripped, empty ones skipped, each at most
+  MAX_SYMBOL_CHARS characters), or else the
   code-shaped names in its description (`rules.code_tokens`); at most MAX_TOKENS of them.
   Each goes through the symbol rule: one match is resolved, several are listed as ambiguous
   (never guessed), none is unresolved. An ambiguous name lists at most MAX_CANDIDATES
   candidates, and all names together at most MAX_TOTAL_CANDIDATES, which keeps a result
-  within the size budget; a name past that total is listed with no candidates.
+  within the size budget. A name is never cut to a single candidate, which would read as a
+  resolution: past the total it is listed with no candidates (find_symbol lists them).
 - Affected: one impact walk from the start sets of all resolved symbols, AFFECTED_DEPTH
   edges deep, counted by layer (None last).
 - Guidelines from doc sections that MENTION a symbol in that walk (the resolved symbols,
-  their members and their dependents) or a module enclosing a resolved symbol (its module
-  and the packages above it, the top-level package excluded, so its layer counts). Ranked as
-  impact_of ranks docs: those on a resolved symbol first, then on a member or an enclosing
-  module, then by the closest dependent, then by path and line. In each section, the
+  their members and their dependents) or a module or class enclosing a resolved symbol (its
+  class, its module and the packages above it, the top-level package excluded, so its layer
+  counts). Ranked as impact_of ranks docs: those on a resolved symbol first, then on a
+  member or an enclosing module or class, then by the closest dependent, then by path and
+  line. In each section, the
   sentences naming a mentioned symbol (see _names), or if none does (the mention is in the
   heading or a fence) those with a stance; those with a stance first.
 - Then guidelines from a full-text search on the description: the best SEARCH_SECTIONS
@@ -21,8 +24,10 @@ which documented rules apply. No LLM: the calling agent makes the final judgment
   letters or more, not a number or a common English word), those with a stance first, then
   those sharing more words.
 - Each guideline quotes one sentence, centered on what matched, and cites its own lines. A
-  sentence found both ways is listed once, as a mention. At most PER_SECTION per section
-  and MAX_GUIDELINES in all.
+  sentence found both ways is listed once, as a mention. At most PER_SECTION per section.
+- Order: mention sections by rank, then search sections by score; within a section, line
+  order. If more than MAX_GUIDELINES remain, those with a stance are kept first, in that
+  order.
 - `truncated` is set when names, candidates or guidelines were cut.
 """
 
@@ -49,7 +54,8 @@ from memex.query.models import (
 from memex.query.rules import Sentence, code_tokens, modal_word, section_sentences, stance
 from memex.query.symbols import resolve_symbol
 
-MAX_TOKENS = 10
+MAX_TOKENS = 8
+MAX_SYMBOL_CHARS = 200
 MAX_CANDIDATES = 3
 MAX_TOTAL_CANDIDATES = 8
 AFFECTED_DEPTH = 3
@@ -66,7 +72,9 @@ _STOPWORDS = frozenset(
     "they this those want were what when where which will with would your".split()
 )
 
-_MODULES = "MATCH (m:Module {codebase: $codebase}) WHERE m.id IN $ids RETURN m.id AS id"
+_ENCLOSING = (
+    "MATCH (m {codebase: $codebase}) WHERE m.id IN $ids AND (m:Module OR m:Class) RETURN m.id AS id"
+)
 _MENTIONING = (
     "MATCH (doc:Doc {codebase: $codebase})-[:MENTIONS]->(c) WHERE c.id IN $ids "
     "WITH DISTINCT doc "
@@ -96,6 +104,8 @@ def check_change(driver: Driver, codebase: str, proposal: ChangeProposal) -> Cha
             f"description must be at most {MAX_QUERY_CHARS} characters, got {len(description)}"
         )
     explicit = [symbol.strip() for symbol in proposal.symbols if symbol.strip()]
+    if any(len(symbol) > MAX_SYMBOL_CHARS for symbol in explicit):
+        raise ValueError(f"symbols must be at most {MAX_SYMBOL_CHARS} characters each")
     names = list(dict.fromkeys(explicit)) or code_tokens(description)
     truncated = len(names) > MAX_TOKENS
 
@@ -108,7 +118,7 @@ def check_change(driver: Driver, codebase: str, proposal: ChangeProposal) -> Cha
         if ref is not None:
             resolved.setdefault(ref.qualname, ref)
         elif candidates:
-            kept = candidates[:left]
+            kept = candidates[:left] if left >= 2 else []
             left -= len(kept)
             ambiguous.append(AmbiguousName(name=name, candidates=kept))
             truncated = truncated or cut or len(kept) < len(candidates)
@@ -118,13 +128,12 @@ def check_change(driver: Driver, codebase: str, proposal: ChangeProposal) -> Cha
     resolved_ids = {code_id(codebase, qualname) for qualname in resolved}
     start_ids = [i for node_id in resolved_ids for i in start_set(driver, node_id)]
     distance, found = walk(driver, list(dict.fromkeys(start_ids)), AFFECTED_DEPTH)
-    enclosing = _enclosing_modules(driver, codebase, list(resolved))
+    enclosing = _enclosing(driver, codebase, list(resolved))
+    mentioned = _mention_sections(driver, codebase, resolved_ids, distance, enclosing)
     searched = _search_sections(driver, codebase, description)
-    guidelines, cut = _merge(
-        _mention_sections(driver, codebase, resolved_ids, distance, enclosing)
-        + searched[:SEARCH_SECTIONS]
-    )
-    cut = cut or any(section.picks for section in searched[SEARCH_SECTIONS:])
+    guidelines, cut = _merge(mentioned + searched[:SEARCH_SECTIONS])
+    # the section past the limit counts as cut only if it would have added a sentence
+    cut = cut or len(_merge(mentioned + searched)[0]) > len(guidelines)
 
     return ChangeCheck(
         codebase=codebase,
@@ -132,7 +141,7 @@ def check_change(driver: Driver, codebase: str, proposal: ChangeProposal) -> Cha
         ambiguous=ambiguous,
         unresolved=unresolved,
         affected=_summary(found),
-        guidelines=guidelines[:MAX_GUIDELINES],
+        guidelines=_keep(guidelines),
         truncated=truncated or cut or len(guidelines) > MAX_GUIDELINES,
     )
 
@@ -146,8 +155,15 @@ def _summary(found: list[Any]) -> ImpactSummary:
     )
 
 
-def _enclosing_modules(driver: Driver, codebase: str, qualnames: list[str]) -> set[str]:
-    """Ids of the modules and packages enclosing `qualnames`, the top-level package excluded."""
+def _keep(guidelines: list[Guideline]) -> list[Guideline]:
+    """At most MAX_GUIDELINES, those with a stance first, in their given order."""
+    by_stance = sorted(range(len(guidelines)), key=lambda i: guidelines[i].stance == "related")
+    return [guidelines[i] for i in sorted(by_stance[:MAX_GUIDELINES])]
+
+
+def _enclosing(driver: Driver, codebase: str, qualnames: list[str]) -> set[str]:
+    """Ids of the classes, modules and packages enclosing `qualnames`, the top-level package
+    excluded."""
     ids = {
         code_id(codebase, ".".join(parts[:end]))
         for parts in (qualname.split(".") for qualname in qualnames)
@@ -156,7 +172,7 @@ def _enclosing_modules(driver: Driver, codebase: str, qualnames: list[str]) -> s
     if not ids:
         return set()
     rows, _, _ = driver.execute_query(
-        _MODULES, codebase=codebase, ids=list(ids), routing_=RoutingControl.READ
+        _ENCLOSING, codebase=codebase, ids=list(ids), routing_=RoutingControl.READ
     )
     return {row["id"] for row in rows}
 
@@ -169,7 +185,7 @@ def _mention_sections(
     enclosing: set[str],
 ) -> list[_Section]:
     """The doc sections that mention any id in `distance` or `enclosing`, best first."""
-    ranks = dict.fromkeys(enclosing, 0) | distance
+    ranks = distance | dict.fromkeys(enclosing, 0)  # enclosing ranks as a member
     if not ranks:
         return []
     rows, _, _ = driver.execute_query(
@@ -288,9 +304,9 @@ def _named_or_stance(
 
 def _named(sentence: Sentence, bare: list[str], spans: set[str]) -> str:
     """The first name the sentence uses, or "". A bare name must stand alone: not part of a
-    longer word, dotted name or path."""
+    longer word, dotted name, path or glob."""
     for name in bare:
-        if re.search(rf"(?<![\w./]){re.escape(name)}(?!\w)(?![./]\w)", sentence.text):
+        if re.search(rf"(?<![\w./]){re.escape(name)}(?![\w*?])(?![./][\w*?])", sentence.text):
             return name
     for match in _SPAN.finditer(sentence.text):
         name = match.group(1).strip().removesuffix("()")

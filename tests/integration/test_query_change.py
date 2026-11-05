@@ -310,11 +310,14 @@ def test_docs_mentioning_the_change_give_cited_sentences_with_a_stance(
     assert result.truncated is False
 
 
-def test_guidelines_are_capped(documented: Driver, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_guidelines_are_capped_keeping_those_with_a_stance(
+    documented: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(change, "MAX_GUIDELINES", 3)
     result = check(documented, "Tidy it up.", ["BaseService"])
 
-    assert result.guidelines == BASE_GUIDELINES[:3]
+    # the related scripts.md sentence gives way; the rest keep their order
+    assert result.guidelines == [BASE_GUIDELINES[i] for i in (0, 2, 3)]
     assert result.truncated is True
 
 
@@ -558,3 +561,98 @@ def test_candidates_share_one_cap_across_ambiguous_names(
         ("get", 0),  # still listed: call find_symbol for it
     ]
     assert result.truncated is True
+
+
+def test_an_ambiguous_name_never_keeps_a_single_candidate(
+    indexed: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # after get_one's 2 candidates, 1 is left: too few to choose from, so none are listed
+    monkeypatch.setattr(change, "MAX_TOTAL_CANDIDATES", 3)
+    result = check(indexed, "Change `get_one`, `__init__` and `get`.")
+
+    assert [(a.name, len(a.candidates)) for a in result.ambiguous] == [
+        ("get_one", 2),
+        ("__init__", 0),
+        ("get", 0),
+    ]
+
+
+def test_an_explicit_symbol_is_at_most_200_characters(indexed: Driver) -> None:
+    with pytest.raises(ValueError, match="symbols"):
+        check(indexed, "Tidy it up.", ["a" * 201])
+
+
+ORDER_SERVICE = "app.services.order_services.order_service.OrderService"
+# Reviewer run 2 cases.
+RUN2_DOCS = [
+    (
+        "docs/z_base.md",  # app._base encloses BaseService and also imports it
+        "Base package",
+        1,
+        ["Never import routes in app/_base."],
+        ["app._base"],
+    ),
+    (
+        "docs/a_order.md",  # a dependent at distance 1
+        "Order service",
+        1,
+        ["`OrderService` must stay thin."],
+        [ORDER_SERVICE],
+    ),
+    (
+        "docs/repos_glob.md",  # a glob after a package path does not name it
+        "Repos",
+        1,
+        ["Files in app/repos/*.py hold one repository.", "Never commit in `app/repos/`."],
+        ["app.repos"],
+    ),
+    (
+        "docs/mention.md",  # also found by the search below, as its second section
+        "Mention",
+        1,
+        ["Never construct `BaseService` twice, zebra."],
+        [BASE],
+    ),
+    ("docs/search.md", "Search", 1, ["Zebra quagga zebra quagga rules."], []),
+]
+
+
+@pytest.fixture
+def run2(driver: Driver) -> Driver:
+    ensure_schema(driver)
+    replace_codebase(driver, with_docs(RUN2_DOCS))
+    return driver
+
+
+def paths(result: ChangeCheck) -> list[str]:
+    return list(dict.fromkeys(g.citation.path for g in result.guidelines))
+
+
+def test_an_enclosing_module_ranks_as_a_member_even_when_it_imports_the_symbol(
+    run2: Driver, many: None
+) -> None:
+    found = paths(check(run2, "Tidy it up.", ["BaseService"]))
+
+    assert found.index("docs/z_base.md") < found.index("docs/a_order.md")
+
+
+def test_changing_a_method_reaches_rules_on_its_class(run2: Driver, many: None) -> None:
+    result = check(run2, "Tidy it up.", [f"{ORDER_SERVICE}.create"])
+
+    assert quotes(result, "docs/a_order.md") == [("`OrderService` must stay thin.", 2)]
+
+
+def test_a_glob_after_a_package_path_does_not_name_it(run2: Driver, many: None) -> None:
+    result = check(run2, "Tidy it up.", ["UserRepository"])
+
+    assert quotes(result, "docs/repos_glob.md") == [("Never commit in `app/repos/`.", 3)]
+
+
+def test_a_search_section_past_the_limit_with_nothing_new_is_not_a_cut(
+    run2: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(change, "SEARCH_SECTIONS", 1)
+    result = check(run2, "Zebra quagga.", ["BaseService"])
+
+    assert ("Zebra quagga zebra quagga rules.", 2) in quotes(result, "docs/search.md")
+    assert result.truncated is False

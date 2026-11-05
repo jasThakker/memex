@@ -272,3 +272,24 @@ def test_no_tool_writes(server: FastMCP, driver: Driver) -> None:
         call(server, name, args)
 
     assert counts() == before
+
+
+def test_check_change_takes_a_proposal_with_a_required_description(server: FastMCP) -> None:
+    schema = tools(server)["check_change"].input_schema
+    proposal = schema["properties"]["proposal"]
+    if "$ref" in proposal:
+        proposal = schema["$defs"][proposal["$ref"].rsplit("/", 1)[-1]]
+
+    assert "proposal" in schema["required"]
+    assert proposal["required"] == ["description"]
+    assert proposal.get("additionalProperties") is False
+    with pytest.raises(ToolError):
+        call(
+            server,
+            "check_change",
+            {"codebase": "layered_app", "proposal": {"description": "x", "extra": 1}},
+        )
+
+
+def test_check_change_says_what_an_empty_candidate_list_means(server: FastMCP) -> None:
+    assert "find_symbol" in tools(server)["check_change"].description

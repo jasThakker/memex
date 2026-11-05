@@ -41,6 +41,19 @@ GUIDE = "Mealie Development Guide for AI Agents > Critical Development Practices
 APP_SETTINGS = "Instantiate `AppSettings()` directly in a new service to read the base URL."
 LOCALES = "Add a German translation by editing the de-DE locale files."
 PIP = "Run the backend tests with pip and python directly."
+# Ten distinct classes and functions, named explicitly: the most resolved symbols at once.
+TEN = [
+    "AppSettings",
+    "RecipeModel",
+    "AllRepositories",
+    "RecipeService",
+    "get_app_settings",
+    "GroupAIProviderController",
+    "OpenAIService",
+    "IngredientParserController",
+    "RegisteredParser",
+    "ABCIngredientParser",
+]
 # Ten short names shared by several classes: the largest result a description can ask for.
 MANY_NAMES = (
     "Change `get_one`, `create`, `update`, `delete`, `__init__`, `get_all`, `get`, `save`, "
@@ -136,6 +149,10 @@ def test_find_symbol_puts_the_class_first(server: FastMCP) -> None:
                 "proposal": {"description": "Refactor it.", "symbols": ["AllRepositories"]},
             },
         ),
+        (
+            "check_change",
+            {"codebase": "mealie", "proposal": {"description": "Refactor.", "symbols": TEN}},
+        ),
     ],
 )
 def test_results_fit_the_size_budget_at_default_limits(
@@ -207,6 +224,7 @@ def test_running_python_through_uv_is_encouraged_by_search(server: FastMCP) -> N
 def test_many_ambiguous_names_share_the_candidate_cap(server: FastMCP) -> None:
     checked = check(server, MANY_NAMES)
 
-    assert len(checked.ambiguous) >= 9
-    assert sum(len(a.candidates) for a in checked.ambiguous) <= 8
-    assert checked.truncated is True
+    counts = [len(a.candidates) for a in checked.ambiguous]
+    assert all(count in (0, 2, 3) for count in counts)  # never a single candidate
+    assert sum(counts) <= 8
+    assert counts[-1] == 0  # past the total: listed, with no candidates

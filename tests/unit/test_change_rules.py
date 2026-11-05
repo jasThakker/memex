@@ -37,10 +37,19 @@ def test_code_tokens_are_backtick_spans_dotted_snake_and_camel_names_in_order() 
         "Run `uv run pytest` and edit `app/routes/`.",  # spans that are not identifiers
         # file names, hosts and acronym plurals are not code names
         "Update the URLs in README.md, pyproject.toml and main.py for the APIs on github.com.",
+        "Edit `settings.py` and the `APIs` on `github.com`.",  # the same inside backticks
     ],
 )
 def test_plain_text_has_no_code_tokens(description: str) -> None:
     assert code_tokens(description) == []
+
+
+def test_underscores_alone_do_not_make_a_name() -> None:
+    # bold underscores and private single words are not tokens; dunders and snake_case are
+    assert code_tokens("__Do not__ touch _ or _private; rename __version__ and _load_all.") == [
+        "__version__",
+        "_load_all",
+    ]
 
 
 def test_a_span_holding_a_call_yields_the_name_inside_it() -> None:
@@ -102,6 +111,20 @@ def test_a_sentence_may_start_with_a_code_span() -> None:
         (  # blockquote markers are dropped
             "> Prefer X.\n> Never Y.",
             [Sentence("Prefer X.", 1, 1), Sentence("Never Y.", 2, 2)],
+        ),
+        (  # a sentence may end inside emphasis, a quote or a parenthesis
+            '**Run codegen after schema changes.** Never edit types. Use X." (See it.) Then Y.',
+            [
+                Sentence("**Run codegen after schema changes.**", 1, 1),
+                Sentence("Never edit types.", 1, 1),
+                Sentence('Use X."', 1, 1),
+                Sentence("(See it.)", 1, 1),
+                Sentence("Then Y.", 1, 1),
+            ],
+        ),
+        (  # a fence inside a blockquote is code, not prose
+            "> Note:\n> ```bash\n> # you must not\n> ```\n> Done.",
+            [Sentence("Note:", 1, 1), Sentence("Done.", 5, 5)],
         ),
         (  # a table without leading pipes: one sentence per row, no separator row
             "Rule | Note\n--- | ---\nNever X | y\nAlways Z | w",
