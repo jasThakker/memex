@@ -40,6 +40,7 @@ known-first-party = ["memex"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["eval"]
 addopts = "--strict-markers -m 'not neo4j and not realrepo'"
 markers = [
     "neo4j: needs Docker; runs against a throwaway Neo4j testcontainer",
