@@ -146,7 +146,7 @@ class Extractor(Protocol):
 
 ## 7. Graph schema
 
-Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codebase}:doc:{path}#{anchor}"` for docs.
+Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codebase}:ext:{dotted.name}"` for external names, `"{codebase}:doc:{path}#{anchor}"` for docs. Every node belongs to exactly one codebase.
 
 ### Nodes
 
@@ -156,14 +156,14 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 | `Module` | id, codebase, qualname, path, layer, domain, docstring (first line) |
 | `Class` | id, codebase, name, qualname, path, line, end_line, layer, domain, docstring, tablename (when an extractor sets it) |
 | `Function` | id, codebase, name, qualname, path, line, end_line, layer, domain, signature, is_method, is_async, docstring |
-| `External` | id (e.g. `ext:pydantic.BaseModel`), name. Only for IMPORTS and INHERITS targets outside the codebase; never a CALLS target |
+| `External` | id (e.g. `{codebase}:ext:pydantic.BaseModel`), codebase, name. Only for IMPORTS and INHERITS targets outside the codebase; never a CALLS target |
 | `Doc` | id, codebase, path, heading_path (e.g. "Developers Guide > Database Changes"), anchor, text, start_line, end_line, kind (from `doc_kinds` in `memex.toml`, default `doc`) |
 
 ### Edges
 
 | Edge | From -> To | Properties |
 |---|---|---|
-| `DEFINES` | Module -> Class/Function, Class -> Function | |
+| `DEFINES` | Module -> Class/Function, Class -> Class/Function | |
 | `IMPORTS` | Module -> Module/Class/Function/External | names, line |
 | `CALLS` | Function -> Function | line, confidence (`exact`, `inferred`; `ambiguous` is stretch, see section 9) |
 | `INHERITS` | Class -> Class/External | position |
@@ -186,11 +186,12 @@ Labels come from the folder structure, not from a hardcoded list.
 - **Layer** is the first folder under the package root (`memex/ingest/...` gives `ingest`). Modules directly in the package root get layer `root`.
 - **Domain** is the next folder under the layer folder (`memex/ingest/code/...` gives `code`). For a file directly in the layer folder, or in the package root, it is the file stem.
 - One leading underscore is dropped from labels, because it marks "private" in Python, not a different area: in httpx, `_transports/asgi.py` gets layer `transports`, domain `asgi`, and `_client.py` gets layer `root`, domain `client`.
+- `__init__.py` is labeled as its directory: `pkg/__init__.py` gets layer `root`, `pkg/routes/__init__.py` gets layer `routes` with no domain, and `pkg/routes/users/__init__.py` gets domain `users`. Other dunder files lose both underscore pairs (`__version__.py` gives `version`).
 - No other renaming and no singularizing, so every label is a folder or file name and always explainable.
 
 **With rules** (`[codebases.X.layers]`, `[codebases.X.domains]`):
 - The layer map lets a multi-segment path (`db/models`) count as one layer with its own label.
-- Domain rules strip affixes and singularize. These are generic options that any repo can use; for example, in Mealie's config they make `routes/groups`, `schema/group` and `services/group_services` all become `group`, and the flat `repos/repository_recipes.py` becomes `recipe`.
+- Domain rules are applied in order: drop the underscores as above, strip the first matching prefix, strip the first matching suffix, then singularize (`-ies` becomes `-y`, a trailing `-s` is dropped except after `s`, `u` or `i`, and words ending in `-ics` are kept). These are generic options that any repo can use; for example, in Mealie's config they make `routes/groups`, `schema/group` and `services/group_services` all become `group`, and the flat `repos/repository_recipes.py` becomes `recipe`.
 - Folders not in the map fall back to the default rule, so nothing is silently dropped.
 
 The index summary prints the layer and domain distribution so mislabels are visible. Known imperfect cases in the benchmark repos (for example Mealie's `meal_plan` vs `meals`) are documented, not hidden.
@@ -302,6 +303,7 @@ Stated openly:
 - Python only.
 - One framework extractor (SQLAlchemy).
 - Name-based call resolution with no type inference.
+- Functions and classes defined inside a function get no node of their own; their code counts as part of the enclosing function.
 - Full re-index only; incremental indexing comes later.
 - Doc mentions are found lexically.
 - Guideline stance comes from modal-verb rules, not semantic understanding.
