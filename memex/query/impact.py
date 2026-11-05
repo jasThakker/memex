@@ -9,7 +9,9 @@
   module is not followed (otherwise most of a codebase depends on anything by depth 3).
 - The closest `limit` dependents are kept, grouped by layer (None last); `total` counts all.
 - Up to MAX_DOCS doc sections that mention the symbol or a dependent are listed: those on the
-  start set first, then by the distance of the closest dependent they mention, then by path.
+  symbol itself first, then those on its members, then by the distance of the closest
+  dependent they mention, then by path. Each lists only the mentions in the impact set.
+- `truncated` is set when dependents or docs (or candidates) were cut.
 """
 
 from collections import defaultdict
@@ -27,7 +29,7 @@ MAX_DOCS = 5
 
 _START_SET = "MATCH (:Module|Class|Function {id: $id})-[:DEFINES*0..]->(n) RETURN n.id AS id"
 _STEP = (
-    "MATCH (t) WHERE t.id IN $ids "
+    "MATCH (t:Module|Class|Function) WHERE t.id IN $ids "
     "MATCH (d)-[r]->(t) WHERE type(r) IN $edges AND (d:Module OR d:Class OR d:Function) "
     "RETURN d.id AS id, labels(d)[0] AS label, properties(d) AS props, "
     "type(r) AS edge, t.id AS target, t.qualname AS to "
@@ -37,7 +39,7 @@ _DOCS = (
     "MATCH (doc:Doc {codebase: $codebase})-[:MENTIONS]->(c) WHERE c.id IN $ids "
     "WITH DISTINCT doc "
     "MATCH (doc)-[:MENTIONS]->(m) "
-    "RETURN properties(doc) AS props, collect(m.id) AS ids, collect(m.qualname) AS mentions"
+    "RETURN properties(doc) AS props, collect([m.id, m.qualname]) AS mentions"
 )
 
 
@@ -89,7 +91,7 @@ def impact_of(
         if not frontier:
             break
 
-    docs, docs_cut = _docs(driver, codebase, distance)
+    docs, docs_cut = _docs(driver, codebase, code_id(codebase, ref.qualname), distance)
     return impact.model_copy(
         update={
             "total": len(found),
@@ -109,14 +111,18 @@ def _by_layer(dependents: list[Dependent]) -> list[LayerGroup]:
     return [LayerGroup(layer=layer, dependents=grouped[layer]) for layer in order]
 
 
-def _docs(driver: Driver, codebase: str, distance: dict[str, int]) -> tuple[list[DocRef], bool]:
+def _docs(
+    driver: Driver, codebase: str, symbol_id: str, distance: dict[str, int]
+) -> tuple[list[DocRef], bool]:
     """(the first MAX_DOCS doc sections mentioning any id in `distance`, whether more did)."""
     rows, _, _ = driver.execute_query(
         _DOCS, codebase=codebase, ids=list(distance), routing_=RoutingControl.READ
     )
 
     def rank(row: dict[str, Any]) -> tuple[int, str, int]:
-        closest = min(distance[i] for i in row["ids"] if i in distance)
+        ids = [node_id for node_id, _ in row["mentions"]]
+        # 0: the symbol itself, 1: a member of the start set, 1 + d: a dependent at distance d
+        closest = 0 if symbol_id in ids else 1 + min(distance[i] for i in ids if i in distance)
         return closest, row["props"]["path"], row["props"]["start_line"]
 
     ranked = sorted(rows, key=rank)
@@ -126,7 +132,7 @@ def _docs(driver: Driver, codebase: str, distance: dict[str, int]) -> tuple[list
             heading_path=row["props"]["heading_path"],
             start_line=row["props"]["start_line"],
             end_line=row["props"]["end_line"],
-            mentions=sorted(row["mentions"]),
+            mentions=sorted(q for node_id, q in row["mentions"] if node_id in distance),
         )
         for row in ranked[:MAX_DOCS]
     ]

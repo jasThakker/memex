@@ -246,7 +246,7 @@ Built with FastMCP. All tools are read-only and return Pydantic models, defined 
 
 **Symbol rule:** `symbol` accepts a full qualname or its last dotted segments (`get_one`, `Client.get`); segments match whole, so `Repository` does not match `UserRepository`. An exact qualname wins. If several symbols match, the tool returns `symbol=None` and the candidates (ordered by qualname, at most `limit`, with `truncated`) instead of guessing; if nothing matches, both are empty.
 
-**Arguments and size:** `limit` is 1 to 200 and `depth`/`max_depth` 1 to 5; anything else, or an empty name or query, is a tool error with the reason. Defaults are set so the JSON an agent receives stays under 4 KB per call, checked on the fixtures and on Mealie (the largest measured, `impact_of` on a central class, is about 3.7 KB at its default of 8).
+**Arguments and size:** `limit` is 1 to 200 and `depth`/`max_depth` 1 to 5; anything else, or an empty name or query, or a doc query over 500 characters, is a tool error with the reason. Defaults are set so the JSON an agent receives stays under 4 KB per call. This is measured, not guaranteed by the code: it is checked on the fixtures and on Mealie (the largest measured, `impact_of` on a central class, is about 3.7 KB at its default of 8), and a repo with much longer qualnames could exceed it.
 
 ```python
 list_codebases() -> CodebaseList
@@ -271,12 +271,15 @@ impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Imp
     # symbol and everything it DEFINES; modules are leaves (their importers are
     # not followed); the closest `limit` dependents grouped by layer, each with
     # distance and edge path; `total` counts all; up to 5 docs that MENTION the
-    # symbol or a dependent, those on the symbol first
+    # symbol or a dependent: those on the symbol itself first, then on its members,
+    # then by the closest dependent; each lists only mentions in the impact set.
+    # `truncated` is set when dependents, candidates or docs were cut
 
 search_docs(codebase: str, query: str, limit: int = 5) -> DocSearch
     # full-text hits on heading_path and text, by score: path, heading_path,
-    # kind, line range, a snippet of at most 200 characters, mentioned symbols;
-    # the query is plain text (Lucene syntax is escaped)
+    # kind, line range, a snippet of at most 200 characters around the first
+    # whole-word match, mentioned symbols; the query is plain text (Lucene
+    # syntax is escaped), at most 500 characters
 
 check_change(codebase: str, proposal: ChangeProposal) -> ChangeCheck
 

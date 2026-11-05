@@ -53,7 +53,7 @@ DOCS = [
         "routes",
         "Routes",
         "doc",
-        "Routes call services and return schemas.",
+        "Routes call services and return schemas. Use self.repos.get_one() for one row.",
         1,
         [],
     ),
@@ -145,6 +145,14 @@ def test_hits_stay_inside_the_named_codebase(indexed: Driver) -> None:
     assert [hit.path for hit in plain.hits] == ["README.md"]
 
 
+def test_the_codebase_filter_comes_before_the_limit(indexed: Driver) -> None:
+    # plainrepo's short README would outscore contributing.md if the limit came first.
+    result = search_docs(indexed, "layered_app", "generated", limit=1)
+
+    assert [hit.path for hit in result.hits] == ["docs/contributing.md"]
+    assert result.truncated is False
+
+
 @pytest.mark.parametrize(
     # `and` would match routes.md ("services and return"), so the operator word is OR here.
     "query",
@@ -157,10 +165,19 @@ def test_lucene_syntax_in_a_query_is_searched_as_text(indexed: Driver, query: st
 
 
 def test_a_code_expression_can_be_searched(indexed: Driver) -> None:
-    # Dots and parentheses would be a Lucene syntax error unescaped.
+    # Unescaped, the parentheses would be a Lucene syntax error.
     result = search_docs(indexed, "layered_app", "self.repos.get_one()")
 
+    assert [hit.path for hit in result.hits] == ["docs/routes.md"]
+    assert "self.repos.get_one()" in result.hits[0].snippet
+
+
+@pytest.mark.parametrize("query", ["()", "--", "!?", '"'])
+def test_a_query_of_punctuation_only_has_no_hits(indexed: Driver, query: str) -> None:
+    result = search_docs(indexed, "layered_app", query)
+
     assert result.hits == []
+    assert result.truncated is False
 
 
 def test_hits_are_truncated_at_the_limit(indexed: Driver) -> None:
@@ -177,7 +194,9 @@ def test_no_match_gives_no_hits(indexed: Driver) -> None:
     assert result.truncated is False
 
 
-@pytest.mark.parametrize(("query", "limit"), [("", 5), ("   ", 5), ("x", 0), ("x", 201)])
+@pytest.mark.parametrize(
+    ("query", "limit"), [("", 5), ("   ", 5), ("x", 0), ("x", 201), ("word " * 101, 5)]
+)
 def test_bad_arguments_are_an_error(indexed: Driver, query: str, limit: int) -> None:
     with pytest.raises(ValueError):
         search_docs(indexed, "layered_app", query, limit=limit)

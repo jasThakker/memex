@@ -189,6 +189,7 @@ def test_a_registered_codebase_that_is_not_indexed_is_an_error(server: FastMCP) 
         ("find_symbol", {"codebase": "layered_app", "name": "x", "limit": 0}),
         ("callers", {"codebase": "layered_app", "symbol": "get_order", "depth": 9}),
         ("search_docs", {"codebase": "layered_app", "query": "  "}),
+        ("search_docs", {"codebase": "layered_app", "query": "word " * 101}),
     ],
 )
 def test_bad_arguments_are_tool_errors_with_the_reason(

@@ -83,7 +83,8 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         """What depends on `symbol` (and on everything it defines): code that calls, inherits,
         references or imports it, up to `max_depth` (1 to 5) edges away, grouped by layer,
         each with its edge path back. `total` counts all dependents, including those cut by
-        `limit`. Also lists up to 5 doc sections that mention the symbol or a dependent."""
+        `limit`. Also lists up to 5 doc sections that mention the symbol or a dependent, those
+        on the symbol first. `truncated` is set when dependents, candidates or docs were cut."""
         return scoped(
             codebase, lambda: impact.impact_of(driver, codebase, symbol, max_depth, limit)
         )
@@ -91,8 +92,9 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
     @mcp.tool(annotations=READ_ONLY)
     def search_docs(codebase: str, query: str, limit: int = 5) -> DocSearch:
         """Full-text search over the codebase's doc sections (headings and text). The query
-        is plain text. Each hit has its path, heading path, line range, a short snippet and
-        the symbols the section mentions; read the file for the full section."""
+        is plain text, at most 500 characters. Each hit has its path, heading path, line
+        range, a short snippet and the symbols the section mentions; read the file for the
+        full section."""
         return scoped(codebase, lambda: docs.search_docs(driver, codebase, query, limit))
 
     return mcp

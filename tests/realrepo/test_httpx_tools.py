@@ -69,9 +69,13 @@ def test_what_depends_on_the_client(server: FastMCP) -> None:
     result = call(server, "impact_of", {"codebase": "httpx", "symbol": CLIENT, "limit": 200})
     impact = Impact.model_validate(result.structured_content)
 
-    assert impact.total > 0
-    layers = {group.layer for group in impact.layers}
-    assert "root" in layers  # default layers: modules directly in the package are `root`
+    # httpx.request() and friends in _api.py construct a Client: a call to its __init__.
+    request = next(
+        d for g in impact.layers for d in g.dependents if d.symbol.qualname == "httpx._api.request"
+    )
+    assert request.distance == 1
+    assert [step.edge for step in request.path] == ["CALLS"]
+    assert request.symbol.layer == "root"  # default layers: modules in the package root
 
 
 def test_the_readme_and_docs_are_searchable(server: FastMCP) -> None:

@@ -3,7 +3,9 @@
 The query is plain text: Lucene syntax characters are escaped and the operator words AND, OR
 and NOT are lower-cased, so an agent can paste any sentence or code expression. Terms are
 OR-ed, as Lucene does by default, and hits are ordered by score. Each hit carries a snippet
-of at most SNIPPET_CHARS characters around the first query term, never the whole section.
+of at most SNIPPET_CHARS characters around the first query word, never the whole section.
+Queries longer than MAX_QUERY_CHARS are an error (Lucene caps the number of terms, and the
+result echoes the query).
 """
 
 import re
@@ -14,6 +16,7 @@ from memex.query.models import DocHit, DocSearch
 from memex.query.symbols import check_limit
 
 SNIPPET_CHARS = 200
+MAX_QUERY_CHARS = 500
 _ELLIPSIS = "..."
 _LUCENE_SPECIAL = re.compile(r'([+\-&|!(){}\[\]^"~*?:\\/])')
 _OPERATOR = re.compile(r"\b(AND|OR|NOT)\b")
@@ -34,6 +37,8 @@ def search_docs(driver: Driver, codebase: str, query: str, limit: int = 5) -> Do
     text = query.strip()
     if not text:
         raise ValueError("query must not be empty")
+    if len(text) > MAX_QUERY_CHARS:
+        raise ValueError(f"query must be at most {MAX_QUERY_CHARS} characters, got {len(text)}")
     check_limit(limit)
     result = DocSearch(codebase=codebase, query=query, hits=[])
     if not _TERM.search(text):  # only punctuation: nothing to search for
@@ -69,23 +74,24 @@ def escape_query(text: str) -> str:
 
 def snippet(text: str, query: str) -> str:
     """At most SNIPPET_CHARS characters of `text` (whitespace collapsed) around the first
-    occurrence of any query term, ignoring case, cut between words; `...` marks a cut. With no
-    term in the text, the snippet starts at its beginning."""
+    whole-word occurrence of any query word, ignoring case, cut between words; `...` marks a
+    cut. With no query word in the text, the snippet starts at its beginning."""
     flat = " ".join(text.split())
     if len(flat) <= SNIPPET_CHARS:
         return flat
-    lowered = flat.lower()
-    positions = [lowered.find(term.lower()) for term in _TERM.findall(query)]
-    found = [position for position in positions if position >= 0]
+    matches = [
+        re.search(rf"\b{re.escape(term)}\b", flat, re.IGNORECASE) for term in _TERM.findall(query)
+    ]
+    found = [match.start() for match in matches if match]
     budget = SNIPPET_CHARS - 2 * len(_ELLIPSIS)
 
     start = max(0, min(found, default=0) - budget // 3)
     end = min(len(flat), start + budget)
     start = max(0, end - budget)
-    if start > 0:  # move forward to the start of a word
-        start = flat.index(" ", start) + 1 if " " in flat[start:end] else start
-    if end < len(flat):  # move back to the end of a word
-        end = flat.rindex(" ", start, end) if " " in flat[start:end] else end
+    if start > 0 and flat[start - 1] != " " and " " in flat[start:end]:
+        start = flat.index(" ", start) + 1  # forward to the start of a word
+    if end < len(flat) and flat[end] != " " and " " in flat[start:end]:
+        end = flat.rindex(" ", start, end)  # back to the end of a word
 
     prefix = _ELLIPSIS if start > 0 else ""
     suffix = _ELLIPSIS if end < len(flat) else ""

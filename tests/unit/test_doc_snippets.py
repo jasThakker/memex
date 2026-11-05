@@ -2,6 +2,8 @@
 
 import re
 
+import pytest
+
 from memex.query.docs import SNIPPET_CHARS, escape_query, snippet
 
 LONG = (
@@ -62,3 +64,29 @@ def test_query_punctuation_does_not_break_matching() -> None:
 
     assert "needle" in result
     assert not re.search(r"\s{2,}", result)
+
+
+def test_terms_match_whole_words_only() -> None:
+    # "orm" is inside "Information" at the start; the real hit is the word ORM much later.
+    text = "Information about the models. " + "filler " * 40 + "The ORM layer maps tables."
+
+    assert "ORM" in snippet(text, "orm")
+
+
+@pytest.mark.parametrize("width", range(3, 10))
+def test_no_word_that_fits_is_dropped_at_a_cut(width: int) -> None:
+    # The kept words plus one neighbour on each side must not fit in the window: if they did,
+    # a word that fitted was dropped. Different word widths put the cuts on spaces or inside
+    # words.
+    words = [f"w{i:0{width - 1}d}" for i in range(300)]
+    budget = SNIPPET_CHARS - 2 * len("...")
+    for position in range(60, 80):
+        kept = snippet(" ".join(words), words[position]).strip(".").split()
+        first, last = words.index(kept[0]), words.index(kept[-1])
+
+        assert words[position] in kept
+        assert len(" ".join(words[first - 1 : last + 2])) > budget, (width, position)
+
+
+def test_a_query_term_at_the_very_start_keeps_the_start() -> None:
+    assert snippet(LONG, "word0").startswith("word0 ")

@@ -32,6 +32,8 @@ USER_MODULE = "app.services.user_services.user_service"
 
 # (doc path, start line, qualnames it mentions)
 DOCS = [
+    ("docs/a_init.md", 1, [f"{BASE}.__init__"]),  # mentions a member of the start set
+    ("docs/mixed.md", 1, [BASE, "app.db.models.orders.Order"]),  # the symbol and an unrelated
     ("docs/services.md", 1, [BASE]),  # mentions the starting symbol
     ("docs/routes.md", 1, ["app.routes.orders.api.get_order"]),  # mentions a dependent
     ("docs/models.md", 1, ["app.db.models.orders.Order"]),  # unrelated to BaseService
@@ -122,7 +124,7 @@ def test_dependents_are_grouped_by_layer_and_ordered_by_distance(indexed: Driver
     assert impact.max_depth == 3
     assert groups(impact) == BASE_GROUPS
     assert impact.total == 12  # all 12 kept at limit 12
-    # 7 docs relate (services.md, routes.md, extra0..4), more than the cap of 5
+    # 9 docs relate (a_init, mixed, services, routes, extra0..4), more than the cap of 5
     assert len(impact.docs) == 5
     assert impact.truncated is True
 
@@ -203,21 +205,28 @@ def test_docs_mentioning_the_symbol_or_a_dependent_are_listed(indexed: Driver) -
     impact = impact_of(indexed, "layered_app", "BaseService", max_depth=1)
 
     # max_depth 1: get_order (distance 2) is not a dependent, so routes.md is left out;
-    # models.md mentions nothing related. Docs on the start symbol come first, then by the
-    # distance of the closest dependent they mention, then by path.
+    # models.md mentions nothing related. Docs on the symbol itself come first, then docs on
+    # its members, then by the distance of the closest dependent they mention; then by path.
     paths = [doc.path for doc in impact.docs]
     assert paths == [
+        "docs/mixed.md",
         "docs/services.md",
+        "docs/a_init.md",
         "docs/extra0.md",
         "docs/extra1.md",
-        "docs/extra2.md",
-        "docs/extra3.md",
     ]
     services = next(doc for doc in impact.docs if doc.path == "docs/services.md")
     assert services.heading_path == "Intro"
     assert (services.start_line, services.end_line) == (1, 4)
     assert services.mentions == [BASE]
-    assert impact.truncated is True  # extra4.md is past the cap of 5
+    assert impact.truncated is True  # extra2.md to extra4.md are past the cap of 5
+
+
+def test_doc_mentions_list_only_the_symbol_and_its_dependents(indexed: Driver) -> None:
+    impact = impact_of(indexed, "layered_app", "BaseService", max_depth=1)
+
+    mixed = next(doc for doc in impact.docs if doc.path == "docs/mixed.md")
+    assert mixed.mentions == [BASE]  # Order is mentioned too, but does not depend on it
 
 
 def test_docs_reach_dependents_further_away(indexed: Driver) -> None:
