@@ -22,6 +22,29 @@ To index another repo, add a section to `memex.toml` (`root` and `packages` are 
 
 Neo4j settings come from `NEO4J_URI`, `NEO4J_USER` and `NEO4J_PASSWORD` (defaults match `docker-compose.yml`).
 
+## Evaluation
+
+Twelve questions about Mealie with hand-verified answers (`eval/questions.yaml`), each asked in two conditions with the same model and prompt: **A** with `Read`, `Grep` and `Glob`, **B** with the Memex tools and `Read`. Details: DESIGN.md section 14.
+
+```sh
+uv run memex index mealie                      # needs vendor/ and Neo4j
+uv run python eval/run.py --name <run> --baseline
+uv run python eval/grade.py eval/results/<run>
+```
+
+Results of the committed run (`eval/results/full/results.md`; `claude-sonnet-5-5`, effort high, one run per condition):
+
+| Condition | F1 | Precision | Recall | Input tokens | Cost | Time |
+|---|---|---|---|---|---|---|
+| A: file search | 0.68 | 0.64 | 0.79 | 502k | $0.71 | 177 s |
+| B: Memex | 0.60 | 0.54 | 0.76 | 701k | $0.80 | 180 s |
+
+- On these mostly one-hop questions, Memex found about as much as file search (recall 0.76 vs 0.79), with more extra items, in the same time, at 13% more cost.
+- It did best on callers and dependents.
+- It lost most on the doc questions, and on a call graph that misses calls through injected attributes, which sent the agent back to reading files.
+
+DEVLOG.md (Phase 7) has the per-question analysis.
+
 ## Tests
 
 ```sh

@@ -461,3 +461,116 @@ Slices: (1) rules (tokens, sentences, stance), (2) resolution and `affected`, (3
 - Phase 7 (evaluation, DESIGN sections 14 and 15) on `phase-7-eval` from `main`: `eval/run.py`, `eval/grade.py`, the 12 questions in two conditions.
 - Carry to Phase 7: measure whether q11 and q12 (check_change) are answered from the cited guidelines; whether generic-word search noise costs answers; whether the call-graph gaps from Phase 5 and the call-span gap (q09) cost answers, before widening any rule.
 - No subagent to run before Phase 7. The reviewer runs inside Phase 7 after the slice groups its plan names; Claude gives the exact prompt each time.
+
+## Phase 7: Evaluation (2026-11-05)
+
+**Goal:** Measure Memex against plain file search on Mealie: the 12 questions from Phase 1, each asked in condition A (`Read`, `Grep`, `Glob`) and condition B (the Memex tools plus `Read`), with the same model, prompt and working directory. Grading is deterministic, the raw transcripts are committed, and the losses are reported. Built on `phase-7-eval` from `main`.
+
+**Approved plan** (written in plan mode before any code; `/Users/jasthakker/.claude/plans/start-phase-7-abstract-coral.md`):
+
+Decisions:
+- `claude-sonnet-5-5`, N=1, pinned in `eval/config.toml`. You chose Sonnet over Opus and Haiku.
+- Neither Mealie's CLAUDE.md (a copy of AGENTS.md) nor Memex's own CLAUDE.md is pre-loaded, so the doc questions measure retrieval. Your choice. Both conditions run from an empty folder outside the repo, with the codebase added through `--add-dir`.
+- Transcripts are saved as stream-json, not json, so each `init` event (the tools actually offered) and every tool call are kept.
+- One prompt for both conditions. It ends with a fenced json answer block and never names Memex.
+- The grader is a deterministic set comparison with no LLM judge. Answers are normalized, then scored by precision, recall and F1 over the combined set of symbols and docs.
+- One baseline call per condition measures B's fixed cost.
+
+Slices:
+1. The grader.
+2. The runner, followed by reviewer run 1.
+3. A smoke run: the two baselines, then q11 in condition B. This is the agreement from the end of Phase 6, and it replaces the live check skipped there.
+4. The full run.
+5. This write-up.
+
+Built as planned, with one fix commit after the reviewer. Stream parsing moved from slice 2 into the grader, which reads the transcripts.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | Slices 1 and 2 against DESIGN section 14 and plan decisions 1 to 7. Focus on grading fairness, isolation between conditions, prompt leaks, token accounting, determinism, failure handling and weak tests. No paid calls | 2 high, 6 medium and 6 low findings, plus weak tests; about 69k subagent tokens, 4.3 minutes | Fixed all 14 in "Address reviewer run 1"; finding 12 (the wording on fixed cost) was fixed in the report and DESIGN section 14 |
+
+**What the reviewer caught that Claude had missed:**
+- A cut-off transcript line (a timeout mid-write) crashed both the runner and the grader.
+- Nothing checked, per run, that B really had the Memex server connected. A failed server would have been graded as condition B.
+- The prompt named Memex through the root path (`.../memex/vendor/mealie`). Claude then found that the workdir name did too.
+- A failed call counted as zero tokens and $0, so the condition that fails more would look cheaper.
+- Doc headings were normalized unfairly to A: A reads raw Markdown, where q11's expected heading is a link.
+- The calling session's environment was passed through unchanged. When Claude checked, it was worse than reported: `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET` and `CLAUDE_EFFORT` were all set. Each eval call would have inherited this session's identity, messaging socket and effort level.
+- Resuming skipped failed transcripts; `meta.json` never recorded later invocations.
+- Weak tests: the "never names Memex" test used a fake root, and the leak test checked only a fragment of each heading.
+- Claude reproduced findings 1, 3, 5, 7 and 9 before the fix; the rest follow directly from the code.
+
+**What went wrong:**
+- Claude ran the reviewer-fix tests red before you had reviewed them, skipping that step of the slice loop. You reviewed tests and code together before the commit.
+- The first `--questions` test showed red only because the option was missing; the folder-level grading code had been written before its test.
+- Edits made through scripts bypassed the hook, so Claude ran ruff and regenerated the HTML views by hand, as in earlier phases.
+- q07's expected answer is at module level, while both conditions answered with the functions inside those modules. Both found all six modules and both scored 0.00. The grading was left as committed rather than changed after seeing the results.
+
+**What I changed (human edits and overrides):**
+- Approved the plan, chose Sonnet 5.5 and chose to keep AGENTS.md out of the context.
+- Approved fixing all 14 reviewer findings, with effort pinned to `high`.
+- Approved the smoke run's cost before the full run.
+- Pushed back on reading the result as "Memex is a demo of engineering discipline only". Graph-native questions (transitive impact, foreign keys, doc-to-code links, later several linked repos) are what grep cannot answer in one step, and this eval did not measure them. That framing is in the "Results" section below and in "Next".
+- Questions I asked along the way: how many slices are left, how long the last two would take, whether Memex answered fewer questions, took longer or cost more, and whether we have a product to demo.
+
+**Results** (`eval/results/full/results.md`; N=1, so no variance estimate):
+
+| Condition | P | R | F1 | Input tokens (all) | Output | Turns | Cost | Time |
+|---|---|---|---|---|---|---|---|---|
+| A: Read, Grep, Glob | 0.64 | 0.79 | 0.68 | 501,869 | 23,036 | 80 | $0.71 | 177 s |
+| B: Memex plus Read | 0.54 | 0.76 | 0.60 | 701,473 | 21,151 | 97 | $0.80 | 180 s |
+
+- **Per question:** A won 5 on F1 (q02, q03, q09, q10, q11), B won 3 (q01, q04, q08), and 4 tied (q05, q06, q07, q12). Recall was 1.0 on 6 questions for A and 5 for B. F1 was 1.0 on 3 for A and 2 for B.
+- **F1 by category, A vs B:** callers 0.96 vs 0.98; locate 0.70 vs 0.59; doc_rules 0.92 vs 0.57; check_change 0.59 vs 0.55; layer_domain 0.08 vs 0.11 (q07, see above).
+- **Overall:** B found about as much as A (recall 0.76 vs 0.79), with more extra items, in the same time, for 13% more cost (40% more input tokens, mostly cache reads). Every run was valid and none errored.
+- **Fixed cost:** B's prompt is 465 input tokens larger per request (5,983 vs 5,518 in the baselines).
+
+**Why B lost, from the transcripts:**
+- **Doc questions:**
+  - On q09, `search_docs` ranked `AGENTS.md#Backend Architecture (mealie/)` first, yet the agent cited a heading that does not exist (`Database & Sessions`).
+  - On q10, the top four hits were all correct, so the agent stopped and read lines 140 to 225 only. A grepped for "generated" and read most of AGENTS.md. Good ranking made B read less.
+- **q04, the token outlier:** 160k input tokens for B against 32k for A.
+  - `callers` on `RecipeService.create_one` returned 3 of the 7 callers. The four through `self.service` and `self.recipe_service` are the known v1 limit (DESIGN section 13).
+  - The agent noticed the gap and read a 27k-character file to close it. It scored 1.00, so the gap cost tokens, not accuracy.
+- **q11:** `base_url` is a field, and the graph has no field nodes. check_change resolved nothing (`affected.total = 0`), and all six guidelines it returned were search noise from the user docs: `ai-providers.md` and an OIDC sentence, picked by "provider" and "must". The agent recovered with `find_symbol` and `Read`. Its recall equalled A's (0.73), its precision was lower.
+- **Precision in general:** both conditions listed extras that are arguably right but not in the expected sets, such as the `AIProviderCreate` subclasses that inherit `base_url`. B listed more.
+
+**Where B was ahead:** callers (q04 the only perfect answer, q05 and q06 tied), q08 recall (0.60 vs 0.40, from following the graph to the scoping code), and fewer input tokens on 5 of 12 questions (q01, q05, q07, q10, q12).
+
+**Carried from Phase 6, answered:**
+- **Were q11 and q12 answered from check_change's cited guidelines?** No. On q11 they were noise; on q12 the answer came from `find_symbol`, `impact_of` and reading.
+- **Does generic-word search noise cost answers?** Yes: on q11 it cost precision, and the expected doc sections were not among the guidelines.
+- **Do the call-graph gaps cost answers?** On q04 they cost tokens, not accuracy.
+- **Does the call-span gap cost answers on q09?** No: q09's miss was a hallucinated heading.
+
+**Reading the result:** the 12 questions were written in Phase 1, before the tools, so they would not favour Memex. Most are one-hop, and most name their symbol outright, which is where grep is cheap on a repo of 415 files. Questions where a graph should matter were not tested: multi-hop impact ("what breaks if I change X"), relationships that are not textual calls (foreign keys, inheritance, doc mentions), and links across repos. Expecting Memex to win there is reasonable, but it is not a result yet. Its edges have known gaps, and a transitive walk compounds them.
+
+**Decisions / ADRs:** none. `graph/model.py` and `query/models.py` are unchanged. DESIGN section 14 and the README were updated to the eval as built.
+
+**Numbers:**
+- 5 commits on `phase-7-eval`: 2 slice commits, 1 reviewer fix commit, the results, and the write-up with this entry. About 1.2 hours from the Phase 6 merge to this entry, against an estimate of 1.5 hours.
+- Tests: 430 unit in about 3 s; 186 Neo4j in about 30 s (container included).
+- Mealie re-indexed in 2.9 s: 3,442 nodes (Function 1,721, Class 709, Module 415, External 350, Doc 247) and 9,800 edges.
+- Eval spend:
+  - smoke run, 3 calls: $0.23;
+  - full run, 26 calls: $1.53 (A $0.71, B $0.80, baselines $0.02);
+  - reviewer: about 69k subagent tokens.
+
+**Next:**
+- Merge `phase-7-eval` into `main` with `--no-ff` (keep the branch). Phase 7 is the last required phase.
+- Phase 8 (optional, polish): a README walkthrough and a demo script built on what works today:
+  - `impact_of RecipeModel` (foreign keys across layers);
+  - check_change on a proposal that names code, such as instantiating `AppSettings` (AGENTS.md:121, `forbids`);
+  - httpx indexed with zero config;
+  - the eval itself.
+
+  Avoid field renames and `callers` through injected attributes in a live demo.
+- Phase 9 candidates, in the order the data points to:
+  1. Resolve calls through injected attributes typed in `__init__` (q04).
+  2. Field nodes, so a field rename resolves (q11).
+  3. Tell the agent when a result is complete or partial, so it stops re-checking.
+  4. Tighten check_change's search matching (q11 noise).
+  5. A small multi-hop impact eval (4 to 6 hand-verified "what breaks if I change X" questions) run in both conditions, with N=3. This tests the claim the current questions did not cover.
+  6. Later: linking `External` nodes to another indexed codebase, for impact across repos.
+- No subagent to run before Phase 8.
