@@ -184,3 +184,73 @@ Slices as built: (1) model + walker + both fixtures, (2) parser, (3) imports, th
 - Open questions for the Phase 3 plan: whether the resolver's `_Index` becomes the `SymbolTable` of DESIGN section 6; how call resolution uses `RawImport.alias` and `module_level`; where INHERITS Externals merge with import Externals; how `CodebaseNode`, `indexed_at` and `IndexStats` reach Neo4j; batch size for `UNWIND` writes; how `memex stats` prints the layer/domain report (the Phase 2 report came from a throwaway script, not from `memex/`); which slice groups get a reviewer run.
 - Carry to Phase 3: the "no REFERENCES without an extractor" tests (plainrepo, httpx) are trivially true until the extractor stage exists; check they still guard it. Fill `IndexStats.unresolved_calls`. Add the remaining section 12 smoke assertions (REFERENCES into `RecipeModel`, `Client.get` calls `Client.request`).
 - No subagent to run before Phase 3. The reviewer runs inside Phase 3 after the slice groups its plan names; Claude gives the exact prompt each time.
+
+## Phase 3: Resolve + extract + store (2026-11-05)
+
+**Goal:** Add the remaining code edges (CALLS with confidence labels, INHERITS, REFERENCES through the opt-in `sqlalchemy` extractor), write the graph to Neo4j, add `memex index` and `memex stats`, and freeze the graph schema and the tool contract (ADR-001) so Phases 4 and 5 can run in parallel.
+
+**Approved plan** (branch `phase-3-resolve`, written before any code):
+
+Decisions:
+- The resolver's `_Index` becomes the public `SymbolTable` of DESIGN section 6, shared with extractors.
+- INHERITS: bases resolved like names (local, imported through re-exports, `alias.Name`), subscripts use their value, builtins become External `builtins.X`, `object` and `metaclass=` skipped, Externals merged with import Externals by id.
+- CALLS in the DESIGN section 9 order, only for call sites inside function bodies; `C.m()` and `C(...).m()` added to rule 3; constructors resolve to `__init__`; external and builtin calls are not counted as unresolved; one edge per caller and callee.
+- `Extractor` gets a second method, `class_properties`, so the `sqlalchemy` extractor can set `ClassNode.tablename`.
+- Store: one write transaction per re-index, `UNWIND` in chunks of 1000, nodes per label, edges per (type, endpoint labels).
+- `CodebaseNode` gains `files` and `unresolved_calls`; `query/models.py` holds the whole tool contract now, `module_summary` included.
+- Dependencies `neo4j` and `testcontainers[neo4j]`, approved in the plan.
+- Reviewer twice: after slices 1 to 3, and at phase end.
+
+Slices: (1) SymbolTable + INHERITS, (2) CALLS, (3) Extractor Protocol + `sqlalchemy`, then reviewer run 1, (4) tool contract models, (5) Neo4j store, (6) CLI + `codebase_stats` + real repos, (7) ADR-001, DESIGN updates, reviewer run 2, DEVLOG, merge. Built as planned, with one fix commit after each reviewer run.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | Slices 1 to 3 against DESIGN sections 4, 6, 7, 9, 12, 13 and the plan; focus on name binding, method lookup, unresolved counting, INHERITS and REFERENCES false positives, weak tests | 8 findings plus 4 weak tests; about 89k subagent tokens, 4.9 minutes | Fixed 1 to 6 and 8 plus the weak tests in "Address reviewer run 1"; deferred finding 7 (five rare binding cases, now in DESIGN section 13) |
+| reviewer (run 2) | End of phase: run 1 fixes, contract models, store, CLI, ADR-001 and DESIGN against sections 6, 7, 9, 10, 12, 13 | 14 findings; about 114k subagent tokens, 5.7 minutes | All 14 fixed in "Address reviewer run 2" |
+
+**What the reviewer caught that Claude had missed:**
+- Parameters of nested defs and lambdas were not local, so `def inner(callback): callback()` became an `exact` edge to an unrelated module function.
+- `super()` fell through to the inferred rule (a self-loop edge) and, in run 2, still did so inside local classes.
+- Names re-exported from outside through a codebase module (`pkg/db.py: from sqlalchemy.orm import relationship`) silently broke INHERITS and the extractor.
+- `class Base(Base)` lost its base.
+- String relationships could land on a pydantic class with the same name; the run 1 fix then dropped `@declared_attr` tablenames (a regression caught by run 2).
+- The contract test froze field names only, not types; the "atomic" store test failed before the transaction began; `ChangeCheck` had no place for ambiguous names, which would have needed an ADR after the merge.
+- The reviewer cannot run code by design (Bash limited to git and pytest), so Claude reproduced every high and medium finding before the decision; all reproduced.
+
+**What went wrong:**
+- The inferred tier first matched common method names: 66 of Mealie's 262 inferred edges were `add`, `pop`, `encode`, `clear` landing on whichever class defines that name. Found only when looking at the real repo after slice 2; fixed by never inferring builtin type method names.
+- Claude wrote expected counts in `test_cli.py` by guessing and was about to take them from the code's own output; it rewrote the test to count independently from the batch and to use numbers read from the fixture tree (the guess for the `order` domain was 6; the fixture has 7).
+- Two test files named `test_cli.py` (unit and integration) clashed, because the test folders have no `__init__.py`; the integration one became `test_cli_neo4j.py`.
+- Claude blamed slow unit tests on fixture re-indexing; profiling showed the Phase 1 fetch-script tests (real git) take 1.6 of about 2.6 s.
+- Edits made through scripts bypassed the hook, so the HTML views were regenerated by hand once.
+- The lint hook reported errors between parallel edits of one file (already fixed by the next edit); noisy but harmless.
+
+**What I changed (human edits and overrides):**
+- Chose to never infer builtin type method names (rule 5), after seeing the false positives.
+- Agreed to measure the call-graph gap (ambiguous `get_one` and friends) in the Phase 7 eval before adding the `ambiguous` tier or attribute typing.
+- Deferred reviewer run 1 finding 7; accepted every other finding of both runs.
+- Kept the real-git fetch tests in the default run and reworded the DESIGN section 12 timing instead of hiding them behind a marker.
+- Questions I asked along the way: what confidence labels mean, why each slice runs red before green, what `UNWIND` and chunks are, why the reviewer cannot run code, how many slices were left, and whether the project is on track.
+
+**Known limits** (documented in DESIGN section 13, not fixed):
+- 572 Mealie call sites go to names that several functions share (`get_one` 149, `page_all` 53, `create` 49): `callers` of repository methods will under-report.
+- Bases in class bodies, `self.Inner()`, `cls(...).m()`, a later outside import shadowing a local class, outside star re-exports.
+- `ForeignKey` in module-level association tables (24 of Mealie's 112) gives no edge; those many-to-many links still appear as `relationship` edges.
+
+**Decisions / ADRs:** ADR-001 (`docs/decisions/001-freeze-graph-schema-and-tool-contract.md`) freezes `graph/model.py` and `query/models.py`, including field types through `tests/unit/contract_schema.json`. DESIGN sections 6, 7, 9, 10, 11, 12 and 13 updated to the code as built.
+
+**Numbers:**
+- 10 commits on `phase-3-resolve` (7 slice or docs commits, 2 reviewer fix commits, this entry); about 1.5 hours of wall-clock time against an estimate of 3.25 hours.
+- Tests: 187 unit in about 2.6 s, 13 Neo4j integration in about 15 s (container included), 12 real-repo smoke tests.
+- Mealie: 3,195 nodes and 9,777 edges (IMPORTS 4,580, DEFINES 2,430, CALLS 1,805 of which 1,614 exact and 191 inferred, INHERITS 709, REFERENCES 253 of which 88 foreign_key and 165 relationship); 34 REFERENCES into `RecipeModel`; 3,143 unresolved call sites, about two thirds of them library calls (68%, measured before the reviewer fixes); indexed into Neo4j in 4.4 s.
+- httpx (defaults only): 624 nodes, CALLS 353 (336 exact, 17 inferred), 0 REFERENCES, 534 unresolved; `Client.get` calls `Client.request` (exact).
+- Memex self-index: 18 files, 0 parse errors.
+- Reviewer: 2 runs, about 203k subagent tokens in total.
+
+**Next:**
+- Merge `phase-3-resolve` into `main` with `--no-ff`. Phase 4 (docs) runs in a git worktree on `phase-4-docs`, in parallel with Phase 5 (query + MCP) on `phase-5-tools`, both from `main`.
+- Open questions for the Phase 4 plan: heading text stored as plain text with links reduced to their visible text (carried from Phase 1); anchor format for Doc ids; how the mention linker matches qualnames, paths and backtick names without false hits on common words; where `index_docs` joins the `memex index` pipeline (both streams touch `memex/ingest/` and `cli.py`, so agree on the seam before the worktree starts); ADRs ingested for the Memex self-index.
+- Open questions for the Phase 5 plan: the `fastmcp` dependency; how tools get a driver and validate `codebase`; whether `list_codebases` reuses `codebase_stats`; the 4 KB size budget against real Mealie results; where short-name ambiguity is resolved.
+- Carry: measure in the eval how often the shared-method-name gap costs an answer; the `ambiguous` tier and attribute typing wait for that data.
+- No subagent to run before Phases 4 and 5. The reviewer runs inside each after the slice groups its plan names; Claude gives the exact prompt each time.
