@@ -14,6 +14,7 @@ Template:
 **What I changed (human edits and overrides):**
 **Decisions / ADRs:**
 **Numbers:** tests, nodes/edges indexed, eval scores, tokens, hours
+**Next:** branch for the next phase, its slices, open questions for its plan, which subagent to run (if any) and the exact prompt
 -->
 
 ## Phase 0: Planning and workflow (2026-11-04)
@@ -54,9 +55,17 @@ Template:
 
 **Layer and domain labels, revisited:** I asked whether layers and domains were Mealie-specific. Decision: keep them as designed. They come from folder names by default for any repo, and repo-specific rules exist only in `memex.toml`. Rejected alternatives: renaming them to neutral terms, making them opt-in, or removing them.
 
-**Numbers:** 0.5 h estimated.
+**Fresh-context handoff check (agentic technique):** I was worried that after `/clear` a fresh session would make mistakes in Phase 1. Instead of trusting it, we tested it: Claude launched the built-in Explore subagent (read-only, no edit tools, no knowledge of this conversation) to read only the repo files and answer five questions: what Memex is, default layer/domain rules, the Phase 1 slices and "done", the workflow rules, and any gaps or contradictions. It is a cheap simulation of the next session, done while doc fixes cost nothing.
+- Result: questions 1 to 4 answered correctly, each with a file citation. Memex is general; Mealie and httpx are benchmarks; the default rules match, including the httpx example; all 6 slices and the done criteria match; the workflow rules match.
+- It found 22 gaps. The real doc bugs: the guardrail as worded would ban the word "memex" inside `memex/`, because Memex is itself in the benchmark table; the reviewer phase-end rule contradicts "not worth it for scaffolding"; workflow.md claimed the reviewer is read-only by tool restriction, but it has Bash; the "all tests" command also selects `realrepo` tests; the phase-start reading list differs between CLAUDE.md and workflow.md; DESIGN.md status line is stale; the DEVLOG template has no "Next" section.
+- The rest are details nobody had decided yet: pyproject layout, Docker image tag and auth, config path bases and defaults, fetch re-run behavior, the `questions.yaml` format, how the guardrail can fail first, `__init__.py` labeling. These are left for Phase 1 plan mode (Phase 2 for `__init__.py`).
+- Applied fixes for all 7 doc bugs on `phase-0-handoff-fixes`. Declined two optional extras: indexing DEVLOG.md and workflow.md in the Memex self-index, and making the handoff check a standard step at the end of each phase.
+- Limitation: the subagent may not see Claude's memory notes, which a real fresh session loads, so this check is slightly stricter than the real handoff.
+
+**Numbers:** 0.5 h estimated. Handoff check: 1 subagent run, about 50k subagent tokens, 2.5 minutes.
 
 **Next:**
 - `phase-0-workflow` merged into `main` with --no-ff; Phase 1 starts by creating `phase-1-scaffold` from `main`.
 - Phase 1 slices: (1) `pyproject.toml`, `.python-version` (3.14), empty `memex/` package, so the lint hook goes live; (2) `docker-compose.yml` with Neo4j 5, healthcheck, persistent volume; (3) `memex.toml` (mealie, httpx, memex) and `memex/config.py`, test-first; (4) guardrail test banning benchmark names in `memex/`; (5) `scripts/fetch_codebases.py` with commit check, `vendor/` gitignored; (6) Claude gives the exact Explore prompt to map Mealie and draft 12 eval questions, which the user verifies by hand before they go into `eval/questions.yaml`.
-- No subagent to run before Phase 1.
+- Open questions to settle in the Phase 1 plan (from the handoff check): pyproject layout, build backend, `[project.scripts]`, ruff rules, whether `uv.lock` is committed, and which DESIGN.md dependencies go in now; pytest marker definitions and default `addopts`; `.gitignore` entries (`__pycache__/`, `.venv/`, `vendor/`); Neo4j image tag, auth, ports, volume name and how "healthy" is checked; `memex.toml` path bases (package-relative vs root-relative), defaults for optional keys, unknown-key handling, config types; fetch script clone depth, re-run behavior and entries without `source`; how the guardrail test is shown failing first; the `eval/questions.yaml` format; whether `.python-version` is `3.14` or `3.14.5`.
+- No subagent to run before Phase 1. No reviewer at the end of Phase 1 (scaffolding only).

@@ -1,6 +1,6 @@
 # Memex design
 
-Status: draft for review (Phase 0). Changes to the graph schema or tool contract after Phase 3 need an ADR in `docs/decisions/`.
+Status: approved in Phase 0. The graph schema and tool contract freeze after Phase 3; changes after that need an ADR in `docs/decisions/`.
 
 ## 1. Purpose
 
@@ -10,7 +10,7 @@ Pointing Memex at a new repo means adding a section to `memex.toml` (often just 
 
 ## 2. Benchmark codebases
 
-Real repos used to test and evaluate Memex. They are inputs, not part of the design: none of their names or conventions appear in the `memex/` package (enforced by a test, section 12).
+Real repos used to test and evaluate Memex. They are inputs, not part of the design: the external ones' names and conventions never appear in the `memex/` package (enforced by a test, section 12).
 
 | Codebase | Why it is here | Pinned at | Config |
 |---|---|---|---|
@@ -71,7 +71,7 @@ Memex works on any Python codebase. The core (walker, parser, resolver, classifi
 
 - Everything **repo-specific** lives in `memex.toml`.
 - Everything **framework-specific** lives in an opt-in extractor under `memex/ingest/code/extractors/`.
-- **Guardrail test:** fails if a benchmark repo's name (`mealie`, `httpx`) appears anywhere in the `memex/` package.
+- **Guardrail test:** fails if an external benchmark repo's name (`mealie`, `httpx`) appears anywhere in the `memex/` package, in any case, including comments and docstrings.
 - **Proof on fixtures:** a plain fixture repo with no rules and no extractors is fully indexed by the defaults.
 - **Proof on a real repo:** httpx is indexed with defaults only and has its own smoke tests (section 12).
 
@@ -285,7 +285,7 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 
 - **`layered_app` fixture with known answers.** About 15 files of a generic layered web app, built to cover patterns common in real projects rather than any one repo: domain folders whose names differ by layer (`routes/users/` vs `services/user_services/`), a flat folder of per-domain files (`repos/repository_orders.py`), ORM models with `ForeignKey("users.id")` and `relationship("User")`, an underscore-private folder (`_base`), an injected attribute call (`self.repos.orders.get_one()`), a method name that is not unique, and an external base class. Tests assert exact node sets, edges and confidence labels.
 - **`plainrepo` fixture for generality.** Two packages, no rules, no extractors. Tests assert the default layer and domain behavior, and that no REFERENCES edges exist without an extractor enabled. The classifier is tested with and without rules on the same paths.
-- **Guardrail test** (default run): scans the `memex/` package source and fails if any benchmark codebase name from `memex.toml` appears in it.
+- **Guardrail test** (default run): scans every file in the `memex/` package and fails if the name of any external codebase in `memex.toml` (one with a `source`, so `mealie` and `httpx` but not `memex`) appears in it, case-insensitive, including comments and docstrings.
 - **Unit tests** (no DB, default run, under 2 seconds): parser, resolver, extractors, classifier, chunker, mention linker.
 - **Integration tests** (`-m neo4j`): store round-trip and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
 - **MCP contract tests** (`-m neo4j`): the FastMCP in-memory client calls each tool and checks the schema, codebase validation, ambiguous-name handling and a size budget (JSON under 4 KB at default limits).
