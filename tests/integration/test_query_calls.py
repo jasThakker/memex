@@ -38,7 +38,8 @@ GET_USER = "app.routes.users.api.get_user"
 
 
 def loops_batch() -> GraphBatch:
-    """m.a -> m.b, m.a -> m.c, m.b -> m.d, m.c -> m.d, m.d -> m.a (a diamond and a cycle)."""
+    """m.a -> m.b, m.a -> m.c, m.b -> m.d, m.c -> m.d (a diamond), m.d -> m.a (a cycle) and
+    m.d -> m.d (recursion)."""
 
     def function(name: str, line: int) -> FunctionNode:
         return FunctionNode(
@@ -55,7 +56,14 @@ def loops_batch() -> GraphBatch:
         )
 
     names = ["a", "b", "c", "d"]
-    calls = [("a", "b", 2), ("a", "c", 3), ("b", "d", 5), ("c", "d", 7), ("d", "a", 9)]
+    calls = [
+        ("a", "b", 2),
+        ("a", "c", 3),
+        ("b", "d", 5),
+        ("c", "d", 7),
+        ("d", "a", 9),
+        ("d", "d", 10),
+    ]
     return GraphBatch(
         codebase="loops",
         nodes=(
@@ -165,8 +173,24 @@ def test_callers_follow_a_cycle_without_repeating(indexed: Driver) -> None:
     assert hops(graph) == [
         ("m.b", "m.d", "exact", 1),
         ("m.c", "m.d", "exact", 1),
+        ("m.d", "m.d", "exact", 1),  # d calls itself
         ("m.a", "m.b", "exact", 2),
     ]
+
+
+def test_a_recursive_function_is_its_own_caller_and_callee(indexed: Driver) -> None:
+    graph = callees(indexed, "loops", "m.d")
+
+    assert hops(graph) == [("m.a", "m.d", "exact", 1), ("m.d", "m.d", "exact", 1)]
+    assert graph.calls[1].line == 10
+
+
+def test_the_walk_ends_when_nothing_new_is_reached(indexed: Driver) -> None:
+    shallow = callees(indexed, "layered_app", f"{ORDER_SERVICE}.owner_name", depth=2)
+    deep = callees(indexed, "layered_app", f"{ORDER_SERVICE}.owner_name", depth=5)
+
+    assert deep.calls == shallow.calls
+    assert deep.truncated is False
 
 
 def test_a_class_stands_for_its_own_init(indexed: Driver) -> None:
@@ -182,7 +206,9 @@ def test_a_class_stands_for_its_own_init(indexed: Driver) -> None:
 
 
 def test_a_class_without_its_own_init_and_a_module_have_no_calls(indexed: Driver) -> None:
-    # UserService inherits __init__; its callers would be those of BaseService.
+    # UserService inherits __init__. Calls to UserService() are stored on BaseService.__init__,
+    # so they cannot be told apart from other subclasses' constructions: no calls, documented
+    # in the tool description and DESIGN.md section 10 (reviewer run 1, finding 3).
     user_service = callers(indexed, "layered_app", "UserService")
     module = callees(indexed, "layered_app", "app.main")
 
@@ -200,6 +226,14 @@ def test_an_ambiguous_symbol_returns_candidates_and_no_calls(indexed: Driver) ->
         "app.services.user_services.user_service.UserService.get",
     ]
     assert graph.calls == []
+    assert graph.truncated is False
+
+
+def test_candidates_are_cut_at_the_limit(indexed: Driver) -> None:
+    graph = callers(indexed, "layered_app", "get", limit=1)
+
+    assert [c.qualname for c in graph.candidates] == [f"{ORDER_SERVICE}.get"]
+    assert graph.truncated is True
 
 
 def test_an_unknown_symbol_returns_nothing(indexed: Driver) -> None:
@@ -215,6 +249,17 @@ def test_calls_are_truncated_at_the_limit(indexed: Driver) -> None:
 
     assert [h[0] for h in hops(graph)] == [GET_ORDER, GET_USER]
     assert graph.truncated is True
+
+
+def test_truncation_can_happen_at_a_deeper_level(indexed: Driver) -> None:
+    # Level 1 is b and c, exactly the limit; d at level 2 is cut.
+    cut = callees(indexed, "loops", "m.a", depth=2, limit=2)
+    fits = callees(indexed, "loops", "m.a", depth=2, limit=3)
+
+    assert [h[0] for h in hops(cut)] == ["m.b", "m.c"]
+    assert cut.truncated is True
+    assert [h[0] for h in hops(fits)] == ["m.b", "m.c", "m.d"]
+    assert fits.truncated is False
 
 
 @pytest.mark.parametrize(("depth", "limit"), [(0, 12), (6, 12), (1, 0), (1, 201)])

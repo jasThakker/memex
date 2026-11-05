@@ -2,6 +2,7 @@
 
 Breadth first, one query per depth level. Each function appears once, at its shortest
 distance; ties between two functions it could be reached through go to the first by qualname.
+A recursive function is listed as its own caller and callee, at distance 1.
 A class stands for its own `__init__` (constructor calls point there); a class that inherits
 its `__init__`, and a module, have no calls.
 """
@@ -54,9 +55,14 @@ def _walk(
 ) -> CallGraph:
     check_depth(depth)
     check_limit(limit)
-    ref, candidates = resolve_symbol(driver, codebase, symbol)
+    ref, candidates, truncated = resolve_symbol(driver, codebase, symbol, limit)
     graph = CallGraph(
-        codebase=codebase, symbol=ref, candidates=candidates, direction=direction, depth=depth
+        codebase=codebase,
+        symbol=ref,
+        candidates=candidates,
+        direction=direction,
+        depth=depth,
+        truncated=truncated,
     )
     start = _start_function(driver, codebase, ref) if ref else None
     if start is None:
@@ -74,10 +80,12 @@ def _walk(
         frontier = []
         for row in rows:
             function = symbol_ref(row["label"], row["props"])
-            if function.qualname in seen:
+            recursion = distance == 1 and function.qualname == start
+            if function.qualname in seen and not recursion:
                 continue
-            seen.add(function.qualname)
-            frontier.append(function.qualname)
+            if not recursion:
+                seen.add(function.qualname)
+                frontier.append(function.qualname)
             found.append(
                 CallHop(
                     function=function,

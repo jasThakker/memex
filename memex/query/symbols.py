@@ -33,31 +33,36 @@ _RANKED = (
 
 
 def resolve_symbol(
-    driver: Driver, codebase: str, symbol: str
-) -> tuple[SymbolRef | None, list[SymbolRef]]:
-    """(the symbol, []) for one match, (None, candidates) for several, (None, []) for none.
+    driver: Driver, codebase: str, symbol: str, limit: int = MAX_LIMIT
+) -> tuple[SymbolRef | None, list[SymbolRef], bool]:
+    """(symbol, candidates, truncated): (the symbol, [], False) for one match, (None,
+    candidates, truncated) for several, (None, [], False) for none.
 
     An exact qualname wins over symbols whose qualname only ends with it. Candidates are
-    ordered by qualname.
+    ordered by qualname, at most `limit` of them; `truncated` says more matched.
     """
+    symbol = symbol.strip()
+    if not symbol:
+        raise ValueError("symbol must not be empty")
+    check_limit(limit)
     rows, _, _ = driver.execute_query(
         _SYMBOL_NODES
         + "AND (n.qualname = $symbol OR n.qualname ENDS WITH $suffix) "
         + _RETURN
-        + " ORDER BY props.qualname",
+        + " ORDER BY props.qualname = $symbol DESC, props.qualname LIMIT $fetch",
         codebase=codebase,
         symbol=symbol,
         suffix=f".{symbol}",
         labels=None,
+        fetch=limit + 1,
         routing_=RoutingControl.READ,
     )
     refs = [symbol_ref(row["label"], row["props"]) for row in rows]
-    exact = [ref for ref in refs if ref.qualname == symbol]
-    if exact:
-        return exact[0], []
+    if refs and refs[0].qualname == symbol:
+        return refs[0], [], False
     if len(refs) == 1:
-        return refs[0], []
-    return None, refs
+        return refs[0], [], False
+    return None, refs[:limit], len(refs) > limit
 
 
 def find_symbol(
@@ -73,6 +78,8 @@ def find_symbol(
     query = name.strip()
     if not query:
         raise ValueError("name must not be empty")
+    if kind != "any" and kind not in _LABELS:
+        raise ValueError(f"kind must be module, class, function or any, got {kind!r}")
     check_limit(limit)
     rows, _, _ = driver.execute_query(
         _SYMBOL_NODES + _RANKED + _RETURN + " ORDER BY rank, props.qualname LIMIT $fetch",
