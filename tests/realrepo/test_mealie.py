@@ -6,10 +6,11 @@ Needs `uv run python scripts/fetch_codebases.py`. Run with `uv run pytest -m rea
 from pathlib import Path
 
 import pytest
+import yaml
 
 from memex.config import load_config
-from memex.graph.model import ClassNode, GraphBatch, ModuleNode
-from memex.ingest.code import index_code
+from memex.graph.model import ClassNode, DocNode, GraphBatch, ModuleNode
+from memex.ingest import index_codebase
 
 pytestmark = pytest.mark.realrepo
 
@@ -20,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def batch() -> GraphBatch:
     codebase = load_config(REPO_ROOT / "memex.toml").get("mealie")
     assert codebase.root.is_dir(), "run `uv run python scripts/fetch_codebases.py` first"
-    return index_code(codebase)
+    return index_codebase(codebase)
 
 
 def test_parses_with_zero_errors(batch: GraphBatch) -> None:
@@ -77,3 +78,49 @@ def test_recipe_model_has_incoming_references_from_other_models(batch: GraphBatc
     assert len(incoming) >= 20
     assert {classes[edge.source].layer for edge in incoming} == {"db_models"}
     assert {edge.extractor for edge in incoming} == {"sqlalchemy"}
+
+
+def docs_of(batch: GraphBatch) -> list[DocNode]:
+    return [node for node in batch.nodes if isinstance(node, DocNode)]
+
+
+def mentioned_by(batch: GraphBatch, doc_id: str) -> set[str]:
+    return {e.target for e in batch.edges if e.kind == "MENTIONS" and e.source == doc_id}
+
+
+def test_agents_md_generated_types_rule_is_a_doc_that_mentions_resolved_symbols(
+    batch: GraphBatch,
+) -> None:
+    # AGENTS.md: "TypeScript types auto-generated from Pydantic schemas - **never manually
+    # edit** `frontend/app/lib/api/types/`", under "### Backend Architecture (mealie/)".
+    [rule] = [doc for doc in docs_of(batch) if "**never manually edit**" in doc.text]
+
+    assert rule.id == "mealie:doc:AGENTS.md#Backend Architecture (mealie/)"
+    assert rule.heading_path == (
+        "Mealie Development Guide for AI Agents > Architecture & Key Patterns > "
+        "Backend Architecture (mealie/)"
+    )
+    assert rule.kind == "agents"
+    assert {
+        "mealie:mealie.repos.repository_factory.AllRepositories",
+        "mealie:mealie.services._base_service.BaseService",
+        "mealie:mealie.db.db_setup.session_context",
+        "mealie:mealie.routes._base.mixins",
+    } <= mentioned_by(batch, rule.id)
+
+
+def test_doc_kinds_come_from_the_config(batch: GraphBatch) -> None:
+    kinds = {doc.path: doc.kind for doc in docs_of(batch)}
+
+    assert kinds["AGENTS.md"] == "agents"
+    assert kinds["docs/docs/contributors/developers-guide/database-changes.md"] == "contributor"
+    assert set(kinds.values()) == {"agents", "contributor", "user"}
+
+
+def test_every_doc_cited_by_the_eval_is_a_doc_node(batch: GraphBatch) -> None:
+    questions = yaml.safe_load((REPO_ROOT / "eval" / "questions.yaml").read_text())
+    cited = {ref for q in questions for ref in q["expected"].get("docs", [])}
+    ids = {doc.id for doc in docs_of(batch)}
+
+    assert len(cited) > 5
+    assert sorted(ref for ref in cited if f"mealie:doc:{ref}" not in ids) == []

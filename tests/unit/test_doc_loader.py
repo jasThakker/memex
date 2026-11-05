@@ -107,3 +107,13 @@ def test_an_unreadable_doc_is_recorded_and_skipped(tmp_path: Path) -> None:
     assert [f.path for f in files] == ["good.md"]
     assert [(e.path, e.line) for e in errors] == [("locked.md", None)]
     assert "cannot read" in errors[0].message
+
+
+def test_the_memex_self_index_labels_its_adrs() -> None:
+    memex = load_config(FIXTURES.parents[1] / "memex.toml").get("memex")
+    kinds = {f.path: f.kind for f in load_docs(memex)[0]}
+
+    assert kinds["DESIGN.md"] == "doc"
+    adrs = {path: kind for path, kind in kinds.items() if path.startswith("docs/decisions/")}
+    assert adrs  # at least ADR-001
+    assert set(adrs.values()) == {"adr"}
