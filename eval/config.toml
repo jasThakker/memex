@@ -1,0 +1,6 @@
+# Eval settings (DESIGN.md section 14). Both conditions use the same values.
+model = "claude-sonnet-5-5"
+runs_per_condition = 1     # N=1 gives no variance estimate; the report says so
+max_budget_usd = 2.0       # per claude call; a call that hits it ends as an error
+timeout_s = 900            # per claude call
+codebase = "mealie"        # a codebase name from memex.toml
