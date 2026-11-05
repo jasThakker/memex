@@ -181,7 +181,7 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 
 ### Doc chunks and mentions
 
-- **Chunks.** A doc is split at every ATX heading and every setext heading. A setext heading is a paragraph underlined with `===` or `---`, unless the paragraph starts with a list item, quote, table row or HTML; its text is the whole paragraph. A chunk runs to the next heading of any level. Headings are never read inside fenced code, indented code, HTML comments or YAML front matter at the top of the file. Text before the first heading is a chunk with an empty anchor and heading_path. Only `\n`, `\r\n` and `\r` end a line.
+- **Chunks.** A doc is split at every ATX heading and every setext heading. A setext heading is a paragraph underlined with `===` or `---`, unless one of its lines starts a list item, quote, table row or HTML (which starts or interrupts the paragraph); its text is the whole paragraph. A chunk runs to the next heading of any level. Headings are never read inside fenced code, indented code, HTML comments or YAML front matter at the top of the file. Text before the first heading is a chunk with an empty anchor and heading_path. Only `\n`, `\r\n` and `\r` end a line.
 - **Doc fields.** `anchor` is the heading's plain text: links reduced to their visible text; code span markers, emphasis markers and inline HTML dropped; whitespace collapsed. A heading repeated in one file gets ` (2)`, ` (3)` in its anchor only, so ids stay unique and match `path#Heading` references. `heading_path` joins the plain text of the enclosing headings and the chunk's own with ` > `. `text` is the body Markdown without the heading line. `start_line` is the heading's first line, and `end_line` the last non-blank line (1-based).
 - **MENTIONS.** Found lexically in a chunk's source lines, heading line included. Each chunk gets one edge per target, with its strongest match:
   - `qualname`: a whole dotted name equal to a Module, Class or Function qualname, anywhere, code fences included.
@@ -338,7 +338,17 @@ Stated openly:
 - `sqlalchemy`: a `ForeignKey` inside a module-level `Table(...)` (an association table) has no class to start from and gives no edge.
 - Full re-index only; incremental indexing comes later.
 - Doc mentions are found lexically; a bare word outside backticks never matches. A name inside a call written in backticks (`Depends(get_session)`) is not linked, and bare method names are not linked (section 7).
-- The chunker reads only the block rules that decide headings: HTML blocks other than comments are not recognized, and a file whose first line is a `---` rule is read as front matter up to the next `---`. Anchors keep a stray `)` from a link URL containing `)`, and keep emphasis markers that span a code span.
+- Backtick spans are found outside fences only: a span inside an HTML comment or indented code still links, and a fence opened inside an HTML comment hides the spans after it. A code span that wraps across lines is not linked.
+- The chunker reads only the block rules that decide headings:
+  - HTML blocks other than comments are not recognized, and any paragraph whose line starts with `<` counts as HTML (`<3 our users` underlined is no heading).
+  - Headings inside blockquotes or list items (`> ## Note`) are not detected.
+  - A file whose first line is a `---` rule is read as front matter up to the next `---`.
+- Anchors are reduced by pattern, not parsed:
+  - Brackets are dropped as shortcut links even without a link definition (`Optional[str]` gives `Optionalstr`).
+  - Angle brackets outside code are dropped as HTML (`<https://...>` and `Map<K, V>` vanish).
+  - A link URL containing `)` leaves a stray `)`, and emphasis markers that span a code span stay.
+  - `*args and **kwargs` loses markers, and backslash escapes and entities are kept as written.
+  - A heading with no plain text gets an empty anchor, or ` (2)` after a preamble.
 - Guideline stance comes from modal-verb rules, not semantic understanding.
 
 ## 14. Evaluation

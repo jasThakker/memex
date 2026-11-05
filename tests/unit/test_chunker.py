@@ -189,3 +189,26 @@ def test_plain_heading_drops_inline_html_and_shortcut_links(raw: str, plain: str
 @pytest.mark.parametrize("text", ["para\n***\nnext\n---\n", "para\n\n---\nnext\n===\n"])
 def test_a_thematic_break_ends_the_paragraph_before_a_setext_heading(text: str) -> None:
     assert [c.anchor for c in chunk(text)] == ["", "next"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Requirements:\n- Python\n- Docker\n---\n",  # a list interrupts the paragraph
+        "Note:\n> quoted\n---\n",  # so does a quote
+        "Intro\n<div>\nx\n</div>\n---\n",  # and an HTML block
+        "Para\n- item\nlazy\n---\n",  # a lazy line after the list item changes nothing
+    ],
+)
+def test_a_paragraph_interrupted_by_a_list_quote_or_html_is_never_a_heading(text: str) -> None:
+    assert [c.anchor for c in chunk(text)] == [""]
+
+
+def test_a_heading_after_an_interrupted_paragraph_is_not_nested_under_it() -> None:
+    chunks = chunk("Requirements:\n- Python\n- Docker\n---\n## Next\n")
+    assert [(c.anchor, c.heading_path) for c in chunks] == [("", ""), ("Next", "Next")]
+
+
+@pytest.mark.parametrize("comment", ["<!-->", "<!--->", "<!---->"])
+def test_a_comment_that_closes_on_its_opener_line_is_closed(comment: str) -> None:
+    assert [c.anchor for c in chunk(f"{comment}\n# A\n")] == ["", "A"]

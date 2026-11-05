@@ -94,6 +94,7 @@ def test_one_edge_per_target_with_the_strongest_match() -> None:
         "routes/users/api.py",  # paths are relative to the codebase root, not the package
         "app/main",  # neither a .py file nor a package directory
         "```\n`AllRepositories`\n```",  # backticks inside a fence are code, not a span
+        "~~~\n`AllRepositories`\n~~~",  # a tilde fence too
         "AllRepositories without backticks",  # bare words are never matched
         "`create_app(settings)`",  # a call with arguments is not a name
         "`self.repos.orders.get_one()`",  # no qualname ends with this

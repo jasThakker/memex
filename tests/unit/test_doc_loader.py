@@ -1,3 +1,4 @@
+import os
 import re
 from pathlib import Path
 
@@ -94,6 +95,9 @@ def test_a_docs_glob_outside_the_root_is_a_config_error() -> None:
         load_docs(codebase)
 
 
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0, reason="root can read a chmod 0 file"
+)
 def test_an_unreadable_doc_is_recorded_and_skipped(tmp_path: Path) -> None:
     (tmp_path / "good.md").write_text("# Good\n", encoding="utf-8")
     locked = tmp_path / "locked.md"
@@ -117,3 +121,10 @@ def test_the_memex_self_index_labels_its_adrs() -> None:
     adrs = {path: kind for path, kind in kinds.items() if path.startswith("docs/decisions/")}
     assert adrs  # at least ADR-001
     assert set(adrs.values()) == {"adr"}
+
+
+@pytest.mark.parametrize("pattern", ["/etc/*.md", ""])
+def test_an_absolute_or_empty_docs_glob_is_a_config_error(pattern: str) -> None:
+    codebase = LAYERED_APP.model_copy(update={"docs": (pattern,)})
+    with pytest.raises(ConfigError, match=re.escape(f"docs glob {pattern!r}")):
+        load_docs(codebase)

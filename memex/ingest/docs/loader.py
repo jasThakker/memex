@@ -55,7 +55,14 @@ def _doc_paths(codebase: Codebase) -> list[str]:
     paths: set[str] = set()
     for pattern in codebase.docs:
         matched: set[str] = set()
-        for found in codebase.root.glob(pattern, case_sensitive=True):
+        try:
+            found_paths = list(codebase.root.glob(pattern, case_sensitive=True))
+        except (NotImplementedError, ValueError) as error:  # absolute or empty pattern
+            raise ConfigError(
+                f"codebase {codebase.name!r}: docs glob {pattern!r} is not a glob relative to "
+                f"the root: {error}"
+            ) from error
+        for found in found_paths:
             if found.suffix != ".md" or not found.is_file():
                 continue
             normalized = Path(os.path.normpath(found))  # lexical: `..` removed, links kept

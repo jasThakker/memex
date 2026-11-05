@@ -47,3 +47,16 @@ def test_doc_parse_errors_join_the_code_parse_errors(tmp_path: Path) -> None:
     assert [error.path for error in batch.stats.parse_errors] == ["pkg/__init__.py", "bad.md"]
     node = next(n for n in batch.nodes if isinstance(n, CodebaseNode))
     assert node.parse_errors == 2  # code and doc files, so it matches the listed errors
+
+
+def test_mentions_are_read_from_the_lines_the_chunker_numbered(tmp_path: Path) -> None:
+    # A form feed is not a line break for the chunker; index_docs must slice the same lines
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "__init__.py").write_text("class Widget:\n    pass\n", encoding="utf-8")
+    (tmp_path / "guide.md").write_text("a\x0cb\n## H\n`Widget`\n", encoding="utf-8")
+    codebase = Codebase(name="tmp", root=tmp_path, packages=("pkg",), docs=("*.md",))
+
+    edges = index_codebase(codebase).edges
+    mentions = [(e.source, e.target, e.match) for e in edges if e.kind == "MENTIONS"]
+
+    assert mentions == [("tmp:doc:guide.md#H", "tmp:pkg.Widget", "backtick_name")]

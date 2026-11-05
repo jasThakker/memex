@@ -2,7 +2,7 @@
 
 A line-based reader for the CommonMark block rules that decide what is a heading: ATX
 headings (`# Title`, up to three leading spaces), setext headings (a paragraph underlined with
-`===` or `---`, unless it starts with a list item, quote, table row or HTML), and the places a
+`===` or `---`, unless a line of it starts a list item, quote, table row or HTML), and the places a
 heading cannot be: fenced code (``` or ~~~), indented code, HTML comments and YAML front
 matter at the top of the file. Each heading starts a chunk that runs to the next heading of
 any level. Text before the first heading is a chunk with an empty anchor.
@@ -20,7 +20,8 @@ _ATX = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*))?$")
 _FENCE = re.compile(r"^ {0,3}(?:(`{3,})(?!.*`)|(~{3,}))")  # no backtick after a ``` opener
 _SETEXT = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 _THEMATIC_BREAK = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")
-# A paragraph starting with a list item, quote, table row or HTML never becomes a heading
+# A paragraph with a line that starts a list item, quote, table row or HTML never becomes a
+# heading: that line starts or interrupts it
 _NOT_SETEXT_TEXT = re.compile(r"^ {0,3}(?:[-*+][ \t]|\d+[.)][ \t]|>|\||<)")
 _COMMENT_START = re.compile(r"^ {0,3}<!--")
 _NEWLINE = re.compile(r"\r\n|\r|\n")
@@ -170,7 +171,7 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
             in_paragraph = False
             continue
         if _COMMENT_START.match(line):
-            in_comment = "-->" not in line.split("<!--", 1)[1]
+            in_comment = "-->" not in line[line.index("<!--") + 2 :]  # `<!-->` closes too
             in_paragraph = False
             continue
         if not line.strip():
@@ -194,7 +195,9 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
         if not in_paragraph:
             in_paragraph = True
             paragraph_start = index
-            paragraph_can_be_heading = not _NOT_SETEXT_TEXT.match(line)
+            paragraph_can_be_heading = True
+        if _NOT_SETEXT_TEXT.match(line):  # starts or interrupts the paragraph
+            paragraph_can_be_heading = False
     return headings
 
 
