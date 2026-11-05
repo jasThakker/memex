@@ -128,3 +128,19 @@ def test_package_wins_over_a_module_of_the_same_name(tmp_path: Path) -> None:
         ("pkg/a/__init__.py", "pkg.a"),
         ("pkg/a/b.py", "pkg.a.b"),
     ]
+
+
+def test_files_and_folders_python_cannot_import_are_skipped(tmp_path: Path) -> None:
+    codebase = make_codebase(
+        tmp_path,
+        ["pkg"],
+        [
+            "pkg/__init__.py",
+            "pkg/foo/bar.py",
+            "pkg/foo.bar.py",  # would also be named pkg.foo.bar
+            "pkg/my-dir/x.py",
+            "pkg/2024_01_init.py",
+        ],
+    )
+
+    assert [file.path for file in walk(codebase)] == ["pkg/__init__.py", "pkg/foo/bar.py"]

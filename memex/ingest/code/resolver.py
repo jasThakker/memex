@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import PurePosixPath
 
-from memex.graph.model import Edge, ExternalNode, code_id, external_id
+from memex.graph.model import ClassNode, Edge, ExternalNode, FunctionNode, code_id, external_id
 from memex.ingest.code.parser import ParsedModule, RawImport
 
 MAX_REEXPORT_HOPS = 5
@@ -64,6 +64,12 @@ class _Index:
     def __init__(self, modules: Sequence[ParsedModule]) -> None:
         self.modules = {module.source.qualname: module for module in modules}
         self.symbols = {node.qualname for module in modules for node in module.nodes}
+        self.definition_lines = {
+            node.qualname: node.line
+            for module in modules
+            for node in module.nodes
+            if isinstance(node, ClassNode | FunctionNode)
+        }
         self.packages = {qualname.split(".")[0] for qualname in self.modules}
 
     def resolve(self, module: ParsedModule, raw: RawImport) -> tuple[str, bool] | None:
@@ -75,6 +81,8 @@ class _Index:
             found = self.find(base, raw.name, hops=0)
             if found is not None:
                 return found, False
+        if base == module.source.qualname:
+            return None  # a package importing an unwalked submodule of itself
         if base in self.modules:
             return base, False
         if base.split(".")[0] in self.packages:
@@ -87,17 +95,21 @@ class _Index:
         """Qualname of the module, class or function that `name` in `module` refers to.
 
         Order: the module's own imports of `name` (last one first, as Python keeps the last
-        binding), then a submodule, class or function `module.name`, then star imports.
+        binding; an import above a `def` or `class` of the same name does not count), then a
+        submodule, class or function `module.name`, then star imports.
         """
         parsed = self.modules.get(module)
         can_follow = parsed is not None and hops < MAX_REEXPORT_HOPS
+        candidate = f"{module}.{name}"
+        defined_at = self.definition_lines.get(candidate, 0)
         if parsed is not None and can_follow:
             for raw in reversed(parsed.imports):
+                if raw.line < defined_at:
+                    break  # the definition comes later and wins
                 if raw.module_level and raw.name != "*" and (raw.alias or raw.name) == name:
                     found = self._follow(parsed, raw, hops)
                     if found is not None:
                         return found
-        candidate = f"{module}.{name}"
         if candidate in self.symbols:
             return candidate
         if parsed is not None and can_follow and not name.startswith("_"):

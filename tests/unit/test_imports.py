@@ -293,3 +293,24 @@ def test_names_under_the_codebase_packages_never_become_externals() -> None:
 
     assert imports_from(edges, "lib", "pkg.use") == set()
     assert externals == []
+
+
+def test_a_definition_after_an_import_of_the_same_name_wins_and_vice_versa() -> None:
+    assert resolve_use(
+        {
+            "pkg/compat.py": "def dumps(): ...\n",
+            "pkg/m.py": "from .compat import dumps\ndef dumps(x): ...\n",  # local override
+            "pkg/n.py": "def dumps(x): ...\nfrom .compat import dumps\n",  # import replaces it
+            "pkg/use.py": "from pkg.m import dumps\nfrom pkg.n import dumps as d2\n",
+        }
+    ) == {("pkg.m.dumps", ("dumps",)), ("pkg.compat.dumps", ("dumps",))}
+
+
+def test_a_package_never_imports_itself() -> None:
+    # _native is a compiled module, so it is never walked.
+    modules = parse_files({"pkg/__init__.py": "from . import _native\n"})
+
+    edges, externals = link_imports("lib", modules)
+
+    assert imports_from(edges, "lib", "pkg") == set()
+    assert externals == []

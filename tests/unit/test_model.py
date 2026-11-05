@@ -37,7 +37,11 @@ def test_nodes_and_edges_are_frozen() -> None:
 
 def test_codebase_node_defaults_to_an_unpinned_codebase_without_extractors() -> None:
     node = CodebaseNode(
-        id="shop", name="shop", root="/repos/shop", indexed_at="2026-11-05T12:00:00+00:00"
+        id="shop",
+        codebase="shop",
+        name="shop",
+        root="/repos/shop",
+        indexed_at="2026-11-05T12:00:00+00:00",
     )
 
     assert (node.source, node.ref, node.commit) == (None, None, None)

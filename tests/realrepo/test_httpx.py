@@ -30,10 +30,12 @@ def test_parses_with_zero_errors(batch: GraphBatch) -> None:
     assert batch.stats.files > 15
 
 
-def test_no_duplicate_ids(batch: GraphBatch) -> None:
+def test_no_duplicate_ids_and_no_dangling_edges(batch: GraphBatch) -> None:
     ids = [node.id for node in batch.nodes]
+    dangling = [edge for edge in batch.edges if {edge.source, edge.target} - set(ids)]
 
     assert len(ids) == len(set(ids))
+    assert dangling == []
 
 
 def test_client_and_async_client_are_found(batch: GraphBatch) -> None:
@@ -52,4 +54,5 @@ def test_underscore_private_folders_and_files_get_clean_labels(batch: GraphBatch
 
 
 def test_no_references_without_an_extractor(batch: GraphBatch) -> None:
+    # Trivially true until Phase 3 adds the extractor stage; it guards that stage.
     assert {edge.kind for edge in batch.edges} == {"DEFINES", "IMPORTS"}

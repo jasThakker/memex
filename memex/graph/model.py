@@ -33,6 +33,7 @@ def doc_id(codebase: str, path: str, anchor: str) -> str:
 @dataclass(frozen=True, kw_only=True)
 class CodebaseNode:
     id: str  # the codebase name
+    codebase: str  # also the name, so per-codebase deletes catch it
     name: str
     root: str
     indexed_at: str  # ISO 8601

@@ -26,6 +26,8 @@ def walk(codebase: Codebase) -> list[SourceFile]:
     """Every .py file under the codebase's packages, minus `exclude`, sorted by path.
 
     A module `x.py` next to a package `x/__init__.py` is skipped: Python imports the package.
+    So is any file whose name, or a folder above it in the package, is not a Python
+    identifier (`foo.bar.py`, `my-dir/`, `2024_init.py`): it cannot be imported as a module.
     """
     _check_packages(codebase)
     files: list[SourceFile] = []
@@ -37,6 +39,7 @@ def walk(codebase: Codebase) -> list[SourceFile]:
                 not file.is_file()
                 or _is_excluded(path, codebase.exclude)
                 or (file.with_suffix("") / "__init__.py").is_file()
+                or not _is_importable(file.relative_to(package_dir))
             ):
                 continue
             qualname = _qualname(package_dir.name, file.relative_to(package_dir))
@@ -69,6 +72,10 @@ def _check_packages(codebase: Codebase) -> None:
 
 def _is_excluded(path: PurePosixPath, patterns: tuple[str, ...]) -> bool:
     return any(path.full_match(pattern) for pattern in patterns)
+
+
+def _is_importable(relative: Path) -> bool:
+    return all(part.isidentifier() for part in relative.with_suffix("").parts)
 
 
 def _qualname(package_name: str, relative: Path) -> str:

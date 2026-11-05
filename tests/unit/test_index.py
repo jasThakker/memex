@@ -25,6 +25,16 @@ def by_qualname(batch: GraphBatch) -> dict[str, ModuleNode | ClassNode | Functio
     }
 
 
+def dangling_edges(batch: GraphBatch) -> list[tuple[str, str, str]]:
+    """(kind, source, target) of every edge whose source or target is not a node in the batch."""
+    ids = {node.id for node in batch.nodes}
+    return [
+        (edge.kind, edge.source, edge.target)
+        for edge in batch.edges
+        if edge.source not in ids or edge.target not in ids
+    ]
+
+
 def make_codebase(tmp_path: Path, files: dict[str, str]) -> Codebase:
     for path, text in files.items():
         (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
@@ -38,7 +48,8 @@ def test_batch_starts_with_the_codebase_node() -> None:
 
     assert LAYERED.codebase == "layered_app"
     assert isinstance(node, CodebaseNode)
-    assert (node.id, node.name, node.root) == ("layered_app", "layered_app", str(codebase.root))
+    assert (node.id, node.codebase, node.name) == ("layered_app", "layered_app", "layered_app")
+    assert node.root == str(codebase.root)
     assert node.extractors == ("sqlalchemy",)
     assert node.parse_errors == 0
     assert node.indexed_at
@@ -55,7 +66,17 @@ def test_every_code_node_carries_its_module_labels() -> None:
         "root",
         "main",
     )
-    assert all(node.layer for node in nodes.values())
+    module_labels = {
+        node.path: (node.layer, node.domain)
+        for node in nodes.values()
+        if isinstance(node, ModuleNode)
+    }
+    mismatched = [
+        node.qualname
+        for node in nodes.values()
+        if (node.layer, node.domain) != module_labels[node.path]
+    ]
+    assert mismatched == []
 
 
 def test_batch_holds_defines_and_imports_edges_and_externals() -> None:
@@ -67,10 +88,12 @@ def test_batch_holds_defines_and_imports_edges_and_externals() -> None:
     assert "pydantic.BaseModel" in externals
 
 
-def test_node_ids_are_unique() -> None:
+def test_node_ids_are_unique_and_every_edge_connects_two_of_them() -> None:
     ids = [node.id for node in LAYERED.nodes]
 
     assert len(ids) == len(set(ids))
+    assert dangling_edges(LAYERED) == []
+    assert dangling_edges(index_code(REGISTRY.get("plainrepo"))) == []
 
 
 def test_stats_count_files_and_modules_per_layer_and_domain() -> None:
@@ -100,6 +123,7 @@ def test_stats_count_files_and_modules_per_layer_and_domain() -> None:
 
 
 def test_plainrepo_has_no_references_without_an_extractor() -> None:
+    # Trivially true until Phase 3 adds the extractor stage; it guards that stage.
     batch = index_code(REGISTRY.get("plainrepo"))
 
     assert batch.stats.files == 10
@@ -131,3 +155,23 @@ def test_a_definition_that_clashes_with_a_submodule_is_dropped(tmp_path: Path) -
     assert isinstance(by_qualname(batch)["pkg.utils"], ModuleNode)
     assert batch.stats.dropped_duplicates == ("lib:pkg.utils",)
     assert not [edge for edge in batch.edges if edge.kind == "DEFINES" and edge.source == "lib:pkg"]
+
+
+def test_everything_inside_a_dropped_class_is_dropped_and_never_imported(
+    tmp_path: Path,
+) -> None:
+    batch = index_code(
+        make_codebase(
+            tmp_path,
+            {
+                "pkg/__init__.py": "class utils:\n    def helper(self): ...\n",
+                "pkg/utils.py": "x = 1\n",
+                "pkg/use.py": "from pkg.utils import helper\n",
+            },
+        )
+    )
+
+    assert batch.stats.dropped_duplicates == ("lib:pkg.utils", "lib:pkg.utils.helper")
+    assert dangling_edges(batch) == []
+    [use] = [edge for edge in batch.edges if edge.source == "lib:pkg.use"]
+    assert (use.target, use.names) == ("lib:pkg.utils", ("helper",))  # the module, not a ghost
