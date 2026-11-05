@@ -131,9 +131,9 @@ def test_sqlalchemy_forms_and_cases_that_give_no_edge() -> None:
                     team = relationship("pkg.models.Team")  # dotted string
                     coach = relationship("Coach")  # no such class
                     league_id = Column(ForeignKey("leagues.id"))  # no such table
-                    clone = relationship("Twin")  # two classes named Twin, neither imported
+                    clone = relationship("Twin")  # two mapped classes named Twin, neither imported
             """,
-            "pkg/more.py": "class Twin: ...\n",
+            "pkg/more.py": 'class Twin:\n    __tablename__ = "more_twins"\n',
             "pkg/other.py": """
                 def relationship(target): ...
                 def ForeignKey(target): ...
@@ -176,3 +176,120 @@ def test_symbol_table_finds_classes_by_class_attribute() -> None:
 
     assert symbols.by_class_attribute("__tablename__", "users") == [USER]
     assert symbols.by_class_attribute("__tablename__", "missing") == []
+
+
+def pairs(edges: list[Edge]) -> set[tuple[str, str, str | None, str | None]]:
+    """(source, target, kind, attr) per edge, without the `lib:` prefix."""
+    return {
+        (
+            edge.source.removeprefix("lib:"),
+            edge.target.removeprefix("lib:"),
+            edge.ref_kind,
+            edge.attr,
+        )
+        for edge in edges
+    }
+
+
+def test_sqlalchemy_functions_reexported_by_a_codebase_module() -> None:
+    edges = extract(
+        {
+            "pkg/__init__.py": "",
+            "pkg/db.py": """
+                from sqlalchemy import ForeignKey
+                from sqlalchemy.orm import relationship
+            """,
+            "pkg/models.py": """
+                from sqlalchemy import Column
+                from pkg.db import ForeignKey, relationship
+
+                class Team:
+                    __tablename__ = "teams"
+
+                class Player:
+                    __tablename__ = "players"
+                    team_id = Column(ForeignKey("teams.id"))
+                    team = relationship("Team")
+            """,
+        }
+    )
+
+    assert pairs(edges) == {
+        ("pkg.models.Player", "pkg.models.Team", "foreign_key", "team_id"),
+        ("pkg.models.Player", "pkg.models.Team", "relationship", "team"),
+    }
+
+
+def test_string_relationships_only_reach_mapped_classes() -> None:
+    edges = extract(
+        {
+            "pkg/__init__.py": "",
+            "pkg/schema.py": """
+                class User: ...  # an API schema, not a model
+                class Tag: ...
+            """,
+            "pkg/base.py": """
+                from sqlalchemy.orm import DeclarativeBase
+
+                class Model(DeclarativeBase): ...
+            """,
+            "pkg/users.py": """
+                from pkg.base import Model
+
+                class User(Model):
+                    __tablename__ = "users"
+
+                class Admin(User): ...  # mapped through its base, no tablename of its own
+            """,
+            "pkg/orders.py": """
+                from sqlalchemy.orm import relationship
+                from pkg.base import Model
+                from pkg.schema import User
+
+                class Order(Model):
+                    __tablename__ = "orders"
+                    user = relationship("User")  # the mapped User, not the imported schema
+                    approver = relationship("Admin")
+                    tags = relationship("Tag")  # only a non-model is called Tag
+            """,
+        }
+    )
+
+    assert pairs(edges) == {
+        ("pkg.orders.Order", "pkg.users.User", "relationship", "user"),
+        ("pkg.orders.Order", "pkg.users.Admin", "relationship", "approver"),
+    }
+
+
+def test_lambda_column_attribute_type_checking_and_self_references() -> None:
+    edges = extract(
+        {
+            "pkg/__init__.py": "",
+            "pkg/models.py": """
+                from typing import TYPE_CHECKING
+                from sqlalchemy import Column, ForeignKey
+                from sqlalchemy.orm import relationship
+
+                if TYPE_CHECKING:
+                    from pkg.other import Team
+
+                class Node:
+                    __tablename__ = "nodes"
+                    parent_id = Column(ForeignKey("nodes.id"))  # self-reference
+                    team_id = Column(ForeignKey(Team.id))  # ForeignKey(Model.id)
+                    team = relationship("Team")  # imported only for type checking
+                    peers = relationship(lambda: Node)
+            """,
+            "pkg/other.py": """
+                class Team:
+                    __tablename__ = "teams"
+            """,
+        }
+    )
+
+    assert pairs(edges) == {
+        ("pkg.models.Node", "pkg.models.Node", "foreign_key", "parent_id"),
+        ("pkg.models.Node", "pkg.other.Team", "foreign_key", "team_id"),
+        ("pkg.models.Node", "pkg.other.Team", "relationship", "team"),
+        ("pkg.models.Node", "pkg.models.Node", "relationship", "peers"),
+    }

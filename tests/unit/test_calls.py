@@ -112,7 +112,7 @@ def test_local_and_imported_names_are_exact_and_unbound_unique_names_inferred() 
 
 
 def test_self_cls_super_and_class_attribute_calls() -> None:
-    edges, _ = link(
+    edges, unresolved = link(
         {
             "pkg/__init__.py": "",
             "pkg/base.py": """
@@ -150,6 +150,24 @@ def test_self_cls_super_and_class_attribute_calls() -> None:
         ("pkg.use.Child.other", "pkg.base.Base.save", "exact"),  # C.m()
         ("pkg.use.Child.other", "pkg.use.Child.log", "exact"),
     }
+    assert unresolved == 0
+
+
+def test_method_lookup_terminates_on_a_cycle_in_the_bases() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                class A(B):
+                    def run(self):
+                        self.missing()
+                class B(A): ...
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 1
 
 
 def test_module_alias_calls_are_exact() -> None:
@@ -158,7 +176,7 @@ def test_module_alias_calls_are_exact() -> None:
             "pkg/__init__.py": "",
             "pkg/sub/__init__.py": "",
             "pkg/sub/deep.py": "def run(): ...\n",
-            "pkg/tools.py": "def go(): ...\n",
+            "pkg/tools.py": "def go(): ...\ndef stop(): ...\n",
             "pkg/use.py": """
                 import pkg.sub.deep
                 from pkg import tools
@@ -166,7 +184,7 @@ def test_module_alias_calls_are_exact() -> None:
 
                 def f():
                     tools.go()
-                    t.go()
+                    t.stop()  # its own callee, so a broken `as` alias cannot hide behind go
                     pkg.sub.deep.run()
                     tools.missing()
             """,
@@ -175,6 +193,7 @@ def test_module_alias_calls_are_exact() -> None:
 
     assert calls(edges, "lib") == {
         ("pkg.use.f", "pkg.tools.go", "exact"),
+        ("pkg.use.f", "pkg.tools.stop", "exact"),
         ("pkg.use.f", "pkg.sub.deep.run", "exact"),
     }
     assert unresolved == 1  # tools.missing
@@ -265,10 +284,12 @@ def test_only_function_bodies_count_and_nested_code_belongs_to_the_enclosing_fun
         {
             "pkg/__init__.py": "",
             "pkg/use.py": """
-                def deco(fn):
-                    return fn
+                def deco():
+                    return lambda fn: fn
 
                 def default(): ...
+
+                def only_default(): ...
 
                 def target(): ...
 
@@ -277,8 +298,8 @@ def test_only_function_bodies_count_and_nested_code_belongs_to_the_enclosing_fun
                 class K:
                     value = default()  # class body: no caller
 
-                @deco
-                def f(x=default()):  # decorator and default: evaluated outside f
+                @deco()
+                def f(x=only_default()):  # decorator and default: evaluated outside f
                     def inner():
                         target()
                     key = lambda: target()
@@ -325,3 +346,138 @@ def test_index_code_adds_calls_and_records_unresolved_calls() -> None:
     assert len(call_edges) == 14
     assert all(edge.source in ids and edge.target in ids for edge in call_edges)
     assert batch.stats.unresolved_calls == 5
+
+
+def test_parameters_of_nested_defs_and_lambdas_are_local() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                def callback(): ...
+                def fn(): ...
+
+                def f():
+                    def inner(callback):
+                        callback()  # the parameter, not pkg.a.callback
+                    return inner, lambda fn: fn()
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 2
+
+
+def test_names_bound_only_in_a_nested_scope_do_not_shadow_the_outer_function() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                def render(): ...
+
+                def f():
+                    def inner():
+                        render = 1
+                        return render
+                    render()
+                    return inner
+            """,
+        }
+    )
+
+    assert calls(edges, "lib") == {("pkg.a.f", "pkg.a.render", "exact")}
+    assert unresolved == 0
+
+
+def test_self_of_a_class_defined_inside_a_method_is_not_the_outer_self() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                class Outer:
+                    def save(self): ...
+                    def build(self):
+                        class Local:
+                            def save(self): ...
+                            def run(self):
+                                self.save()  # Local's self: Local has no node
+                        return Local
+
+                class Other:
+                    def save(self): ...  # so `save` is not unique either
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 1
+
+
+def test_super_without_an_in_codebase_match() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                import json
+
+                class Enc(json.JSONEncoder):
+                    def default(self, o):
+                        return super().default(o)  # the outside base's method
+
+                class MyError(Exception):
+                    def __init__(self, message):
+                        super().__init__(message)  # a builtin base
+
+                class Base: ...
+
+                class Child(Base):
+                    def run(self):
+                        super().helper()  # every base is in the codebase: unresolved
+
+                def helper(): ...  # unique, but super() calls are never inferred
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 1
+
+
+def test_an_outside_name_reexported_by_a_codebase_module_is_external() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/compat.py": "from json import dumps\n",
+            "pkg/other.py": "def dumps(): ...\n",
+            "pkg/use.py": """
+                from pkg.compat import dumps
+
+                def f(data):
+                    dumps(data)  # json.dumps, not the unique pkg.other.dumps
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 0
+
+
+def test_a_class_named_after_its_base_looks_up_methods_in_that_base() -> None:
+    edges, _ = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/base.py": """
+                class Base:
+                    def save(self): ...
+            """,
+            "pkg/a.py": """
+                from pkg.base import Base
+
+                class Base(Base):
+                    def run(self):
+                        self.save()
+            """,
+        }
+    )
+
+    assert calls(edges, "lib") == {("pkg.a.Base.run", "pkg.base.Base.save", "exact")}

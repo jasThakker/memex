@@ -5,8 +5,10 @@ In an assignment directly in a class body (`user_id = mapped_column(ForeignKey("
 - `ForeignKey("table.column")` (or `"schema.table.column"`, or `ForeignKey(Model.id)`) gives
   kind `foreign_key` to the one class whose `__tablename__` is that table.
 - `relationship(Model)`, `relationship("Model")`, `relationship("pkg.mod.Model")` or
-  `relationship(lambda: Model)` gives kind `relationship`. A string is looked up as the module
-  binds it, then as a dotted class name, then as a class name unique in the codebase.
+  `relationship(lambda: Model)` gives kind `relationship`. A string is looked up, as SQLAlchemy
+  does, among mapped classes only: as the module binds it, then as a dotted class name, then
+  as a mapped class name unique in the codebase. A class is mapped if it or an in-codebase
+  ancestor has a `__tablename__` or a base under `sqlalchemy`.
 - `attr` is the assigned attribute, `line` the call's line. A target that cannot be placed, or
   is ambiguous, gives no edge.
 A class whose body assigns a string to `__tablename__` gets the `tablename` property.
@@ -144,12 +146,25 @@ def _relationship_target(
     name = argument.value
     if name.isidentifier():
         bound = _class(symbols.resolve_name(module, name), symbols)
-        if bound is not None:
+        if bound is not None and _is_mapped(bound, symbols):
             return bound
-    if name in symbols.classes:
+    if name in symbols.classes and _is_mapped(name, symbols):
         return name
-    candidates = symbols.classes_by_name.get(name, [])
+    candidates = [cls for cls in symbols.classes_by_name.get(name, []) if _is_mapped(cls, symbols)]
     return candidates[0] if len(candidates) == 1 else None
+
+
+def _is_mapped(cls: str, symbols: SymbolTable) -> bool:
+    """True if the class or an in-codebase ancestor has a `__tablename__` or a base under
+    `sqlalchemy` (such as `DeclarativeBase`)."""
+    return any(
+        "__tablename__" in symbols.class_attributes(ancestor)
+        or any(
+            resolved is not None and resolved[1] and resolved[0].startswith("sqlalchemy.")
+            for resolved in symbols.written_bases(ancestor)
+        )
+        for ancestor in symbols.ancestors(cls)
+    )
 
 
 def _class(resolved: tuple[str, bool] | None, symbols: SymbolTable) -> str | None:

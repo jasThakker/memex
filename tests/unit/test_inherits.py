@@ -126,3 +126,51 @@ def test_index_code_merges_inherits_externals_with_import_externals() -> None:
     assert len(inherits_edges) == 7
     assert ids.count("layered_app:ext:pydantic.BaseModel") == 1
     assert all(edge.target in ids and edge.source in ids for edge in inherits_edges)
+
+
+def test_an_outside_base_reexported_by_a_codebase_module_is_external() -> None:
+    modules = parse_files(
+        {
+            "pkg/__init__.py": "",
+            "pkg/db.py": "from sqlalchemy.orm import DeclarativeBase\n",
+            "pkg/compat.py": "from pkg.db import DeclarativeBase as Base\n",
+            "pkg/models.py": """
+                from pkg.compat import Base
+                from pkg.db import DeclarativeBase
+
+                class A(DeclarativeBase): ...
+                class B(Base): ...  # two hops, renamed on the way
+            """,
+        }
+    )
+
+    edges, externals = link_inherits("lib", SymbolTable(modules))
+
+    assert bases(edges, "lib") == {
+        ("pkg.models.A", "ext:sqlalchemy.orm.DeclarativeBase", 0),
+        ("pkg.models.B", "ext:sqlalchemy.orm.DeclarativeBase", 0),
+    }
+    assert [node.name for node in externals] == ["sqlalchemy.orm.DeclarativeBase"]
+
+
+def test_a_class_named_after_its_base_inherits_from_that_base() -> None:
+    modules = parse_files(
+        {
+            "pkg/__init__.py": "",
+            "pkg/base.py": "class Base: ...\n",
+            "pkg/a.py": """
+                from unittest import TestCase
+                from pkg.base import Base
+
+                class TestCase(TestCase): ...
+                class Base(Base): ...
+            """,
+        }
+    )
+
+    edges, _ = link_inherits("lib", SymbolTable(modules))
+
+    assert bases(edges, "lib") == {
+        ("pkg.a.TestCase", "ext:unittest.TestCase", 0),
+        ("pkg.a.Base", "pkg.base.Base", 0),
+    }

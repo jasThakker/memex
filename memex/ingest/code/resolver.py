@@ -43,7 +43,7 @@ and lambdas included (not decorators or defaults):
 import ast
 import builtins
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 
 from memex.graph.model import (
@@ -102,8 +102,7 @@ def link_inherits(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], list
             definition = module.definitions.get(node.qualname)
             if not isinstance(node, ClassNode) or not isinstance(definition, ast.ClassDef):
                 continue
-            for position, base in enumerate(definition.bases):
-                resolved = symbols.resolve_expression(module, base)
+            for position, resolved in enumerate(symbols.written_bases(node.qualname)):
                 if resolved is None or resolved == ("builtins.object", True):
                     continue
                 dotted, is_external = resolved
@@ -134,8 +133,9 @@ def link_calls(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], int]:
             ):
                 continue
             resolver = _CallResolver(symbols, module, node, definition)
-            for call in _calls_in(definition):
-                outcome = resolver.resolve(call.func)
+            for site in _call_sites(definition, resolver.receiver):
+                call = site.call
+                outcome = resolver.resolve(site)
                 if outcome == _UNRESOLVED:
                     unresolved += 1
                 if not isinstance(outcome, tuple):
@@ -210,9 +210,14 @@ class _CallResolver:
             for raw in module.imports
             if not raw.module_level and function.line <= raw.line <= function.end_line
         }
-        self.locals = _local_names(definition)
+        self.locals: frozenset[str] = frozenset()
+        self.active_receiver: str | None = None
 
-    def resolve(self, func: ast.expr) -> _Outcome:
+    def resolve(self, site: _CallSite) -> _Outcome:
+        """The outcome of one call site, seen from the scope it sits in."""
+        self.locals = site.locals
+        self.active_receiver = self.receiver if site.receiver_in_scope else None
+        func = site.call.func
         if isinstance(func, ast.Name):
             return self._resolve_name_call(func.id)
         if isinstance(func, ast.Attribute):
@@ -220,7 +225,7 @@ class _CallResolver:
         return _EXTERNAL if self._root_is_external(func) else _UNRESOLVED
 
     def _resolve_name_call(self, name: str) -> _Outcome:
-        if name == self.receiver and self.is_classmethod and self.cls is not None:
+        if name == self.active_receiver and self.is_classmethod and self.cls is not None:
             return self._target(self.cls)  # cls(...)
         head = self._head(name)
         if head == _LOCAL:
@@ -238,8 +243,10 @@ class _CallResolver:
                 found = self.symbols.method(base, name)
                 if found is not None:
                     return found, "exact"
-            return self._inferred(name)
-        if isinstance(receiver, ast.Name) and receiver.id == self.receiver:
+            if self.symbols.has_outside_base(self.cls) or hasattr(object, name):
+                return _EXTERNAL  # the method comes from a base outside the codebase
+            return _UNRESOLVED
+        if isinstance(receiver, ast.Name) and receiver.id == self.active_receiver:
             cls = self.cls
         elif isinstance(receiver, ast.Call):  # C(...).m()
             constructed = self._dotted(receiver.func)
@@ -304,7 +311,7 @@ class _CallResolver:
                     break
         if isinstance(expr, _LITERALS):
             return True
-        if isinstance(expr, ast.Name) and expr.id not in (self.receiver, "super"):
+        if isinstance(expr, ast.Name) and expr.id not in (self.active_receiver, "super"):
             head = self._head(expr.id)
             return isinstance(head, tuple) and head[1]
         return False
@@ -334,22 +341,54 @@ class _CallResolver:
         )
 
 
-def _calls_in(definition: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.Call]:
-    """Every call in a function body, nested defs included, in source order. Iterative."""
-    found: list[ast.Call] = []
-    stack: list[ast.AST] = list(definition.body)
+@dataclass(frozen=True)
+class _CallSite:
+    """One call, with the names bound in the scopes around it."""
+
+    call: ast.Call
+    locals: frozenset[str]  # parameters, variables and nested defs of every enclosing scope
+    receiver_in_scope: bool  # False inside a nested def or lambda that rebinds `self`/`cls`
+
+
+_Scope = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
+
+
+def _call_sites(
+    definition: ast.FunctionDef | ast.AsyncFunctionDef, receiver: str | None
+) -> list[_CallSite]:
+    """Every call in a function body, nested defs and lambdas included, in source order.
+
+    Decorators and defaults of a nested def are evaluated in the scope around it. Iterative,
+    so deeply nested expressions do not recurse.
+    """
+    found: list[_CallSite] = []
+    outer = _scope_names(definition)
+    stack: list[tuple[ast.AST, frozenset[str], bool]] = [
+        (statement, outer, True) for statement in definition.body
+    ]
     while stack:
-        node = stack.pop()
+        node, names, receiver_in_scope = stack.pop()
         if isinstance(node, ast.Call):
-            found.append(node)
-        stack.extend(ast.iter_child_nodes(node))
-    return sorted(found, key=lambda call: (call.lineno, call.col_offset))
+            found.append(_CallSite(node, names, receiver_in_scope))
+        if isinstance(node, _Scope):
+            evaluated_outside = [
+                *getattr(node, "decorator_list", []),
+                *node.args.defaults,
+                *(default for default in node.args.kw_defaults if default is not None),
+            ]
+            stack.extend((child, names, receiver_in_scope) for child in evaluated_outside)
+            inner = names | _scope_names(node)
+            rebinds = receiver is not None and receiver in _parameters(node)
+            body = node.body if isinstance(node.body, list) else [node.body]
+            stack.extend((child, inner, receiver_in_scope and not rebinds) for child in body)
+            continue
+        stack.extend((child, names, receiver_in_scope) for child in ast.iter_child_nodes(node))
+    return sorted(found, key=lambda site: (site.call.lineno, site.call.col_offset))
 
 
-def _local_names(definition: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
-    """Parameters, assigned names, nested defs and except-as names anywhere in a function."""
-    arguments = definition.args
-    names = {
+def _parameters(scope: _Scope) -> set[str]:
+    arguments = scope.args
+    return {
         arg.arg
         for arg in (
             *arguments.posonlyargs,
@@ -358,7 +397,13 @@ def _local_names(definition: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]
             *(a for a in (arguments.vararg, arguments.kwarg) if a is not None),
         )
     }
-    stack: list[ast.AST] = list(definition.body)
+
+
+def _scope_names(scope: _Scope) -> frozenset[str]:
+    """Names one function or lambda binds itself: parameters, assigned names, nested def and
+    class names, except-as names. Names bound only inside nested scopes are not included."""
+    names = _parameters(scope)
+    stack: list[ast.AST] = list(scope.body) if isinstance(scope.body, list) else [scope.body]
     while stack:
         node = stack.pop()
         match node:
@@ -366,10 +411,13 @@ def _local_names(definition: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]
                 names.add(node.id)
             case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef():
                 names.add(node.name)
+                continue  # its body is its own scope
+            case ast.Lambda():
+                continue
             case ast.ExceptHandler(name=str()):
                 names.add(node.name)
         stack.extend(ast.iter_child_nodes(node))
-    return names
+    return frozenset(names)
 
 
 def _decorator_name(decorator: ast.expr) -> str | None:
@@ -416,7 +464,7 @@ class SymbolTable:
         self.packages = {qualname.split(".")[0] for qualname in self.modules}
         self.nodes = {node.qualname: node for module in modules for node in module.nodes}
         self._module_of = {node.qualname: module for module in modules for node in module.nodes}
-        self._bases: dict[str, list[str]] = {}
+        self._written_bases: dict[str, list[tuple[str, bool] | None]] = {}
         self._class_attributes: dict[str, dict[str, str]] = {}
 
     def module_of(self, qualname: str) -> ParsedModule:
@@ -448,19 +496,51 @@ class SymbolTable:
             cls for cls in self.classes if self.class_attributes(cls).get(attribute) == value
         )
 
-    def bases(self, cls: str) -> list[str]:
-        """In-codebase base classes of a class, in the order written."""
-        if cls not in self._bases:
+    def written_bases(self, cls: str) -> list[tuple[str, bool] | None]:
+        """(dotted, is_external) of each base as written, or None where it cannot be placed.
+
+        Bases are evaluated before the class binds its own name, so in
+        `from x import Base` / `class Base(Base)` the base is the imported one.
+        """
+        if cls not in self._written_bases:
             module = self._module_of[cls]
             definition = module.definitions.get(cls)
-            found: list[str] = []
-            if isinstance(definition, ast.ClassDef):
-                for base in definition.bases:
-                    resolved = self.resolve_expression(module, base)
-                    if resolved is not None and not resolved[1] and resolved[0] in self.classes:
-                        found.append(resolved[0])
-            self._bases[cls] = [base for base in found if base != cls]
-        return self._bases[cls]
+            found: list[tuple[str, bool] | None] = []
+            for base in definition.bases if isinstance(definition, ast.ClassDef) else []:
+                resolved = self.resolve_expression(module, base)
+                if resolved == (cls, False) and isinstance(base, ast.Name):
+                    resolved = self._bound_before(module, base.id, self.definition_lines[cls])
+                found.append(resolved)
+            self._written_bases[cls] = found
+        return self._written_bases[cls]
+
+    def bases(self, cls: str) -> list[str]:
+        """In-codebase base classes of a class, in the order written."""
+        return [
+            dotted
+            for dotted, is_external in filter(None, self.written_bases(cls))
+            if not is_external and dotted in self.classes and dotted != cls
+        ]
+
+    def ancestors(self, cls: str) -> list[str]:
+        """The class and every in-codebase class it inherits from, each once."""
+        seen: dict[str, None] = {}
+        stack = [cls]
+        while stack:
+            current = stack.pop()
+            if current not in seen:
+                seen[current] = None
+                stack.extend(reversed(self.bases(current)))
+        return list(seen)
+
+    def has_outside_base(self, cls: str) -> bool:
+        """True if the class or an in-codebase ancestor has a base outside the codebase (or
+        one that cannot be placed)."""
+        return any(
+            resolved is None or resolved[1] or resolved[0] not in self.classes
+            for ancestor in self.ancestors(cls)
+            for resolved in self.written_bases(ancestor)
+        )
 
     def method(self, cls: str, name: str) -> str | None:
         """The function `name` defined on a class or, depth first in base order, its bases."""
@@ -564,8 +644,14 @@ class SymbolTable:
             dotted = found
         return dotted, False
 
-    def resolve_binding(self, module: ParsedModule, raw: RawImport) -> tuple[str, bool] | None:
-        """(dotted target, is_external) of the name one import binds, or None."""
+    def resolve_binding(
+        self, module: ParsedModule, raw: RawImport, hops: int = 0
+    ) -> tuple[str, bool] | None:
+        """(dotted target, is_external) of the name one import binds, or None.
+
+        A name that a codebase module only re-exports from outside (`from json import dumps`
+        in `pkg/compat.py`) is followed to the outside name, up to MAX_REEXPORT_HOPS times.
+        """
         base = _absolute(module, raw)
         if base is None:
             return None
@@ -574,7 +660,19 @@ class SymbolTable:
         found = self.find(base, raw.name, hops=0)
         if found is not None:
             return found, False
+        source = self.modules.get(base)
+        if source is not None and hops < MAX_REEXPORT_HOPS:
+            for inner in reversed(source.imports):
+                if inner.module_level and binds(inner) == raw.name:
+                    return self.resolve_binding(source, inner, hops + 1)
         return self._outside(f"{base}.{raw.name}")
+
+    def _bound_before(self, module: ParsedModule, name: str, line: int) -> tuple[str, bool] | None:
+        """What a module-level import binds `name` to before `line`, or None."""
+        for raw in reversed(module.imports):
+            if raw.module_level and raw.line < line and binds(raw) == name:
+                return self.resolve_binding(module, raw)
+        return None
 
     def _outside(self, dotted: str) -> tuple[str, bool] | None:
         """A dotted name not found by `find`: a walked module, External, or nothing."""
