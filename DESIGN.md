@@ -163,7 +163,7 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 
 | Edge | From -> To | Properties |
 |---|---|---|
-| `DEFINES` | Module -> Class/Function, Class -> Function | |
+| `DEFINES` | Module -> Class/Function, Class -> Class/Function | |
 | `IMPORTS` | Module -> Module/Class/Function/External | names, line |
 | `CALLS` | Function -> Function | line, confidence (`exact`, `inferred`; `ambiguous` is stretch, see section 9) |
 | `INHERITS` | Class -> Class/External | position |

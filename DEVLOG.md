@@ -136,4 +136,4 @@ Slices:
 4. Classifier (`memex/ingest/code/classify.py`).
 5. Pipeline + real repos (`index_code` in `memex/ingest/code/__init__.py`, `-m realrepo` smoke tests for Mealie and httpx, layer/domain reports for the user), then reviewer run 2.
 
-Slice status: 0 (handoff) done.
+Slice status: 0 (handoff), 1 (model + walker) and 2 (parser) done. DEFINES also covers Class -> Class (nested classes; DESIGN section 7 updated).
