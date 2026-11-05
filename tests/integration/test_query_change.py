@@ -6,17 +6,19 @@ Affected counts are worked out from the impact_of expectations in test_query_imp
 Needs Docker. Run with `uv run pytest -m neo4j`.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from neo4j import Driver
 
 from memex.config import load_config
+from memex.graph.model import DocNode, Edge, GraphBatch, code_id, doc_id
 from memex.graph.store import ensure_schema, replace_codebase
 from memex.ingest.code import index_code
 from memex.query import change
 from memex.query.change import check_change
-from memex.query.models import ChangeCheck, ChangeProposal, LayerCount
+from memex.query.models import ChangeCheck, ChangeProposal, Citation, Guideline, LayerCount
 
 pytestmark = pytest.mark.neo4j
 
@@ -145,3 +147,165 @@ def test_the_description_must_be_plain_text_of_at_most_500_characters(
 ) -> None:
     with pytest.raises(ValueError, match="description"):
         check(indexed, description, ["BaseService"])
+
+
+# Guidelines from doc sections that MENTION the resolved symbols, their members or their
+# dependents. (path, heading_path, start_line, body lines, qualnames it mentions); the body
+# starts on the line after the heading.
+DOCS = [
+    (
+        "docs/services.md",
+        "Guide > Services",
+        10,
+        [
+            "Services read data through repositories.",  # names no mentioned symbol
+            "Every service must inherit from `BaseService`.",
+            "Never construct",  # one sentence over two lines
+            "`BaseService` directly; use a subclass.",
+            "You may call `BaseService.__init__` from tests.",  # past 2 per section
+        ],
+        [BASE],
+    ),
+    (
+        "docs/scripts.md",
+        "Scripts",
+        1,
+        ["You don't need to subclass `BaseService` in scripts."],  # negated: related
+        [BASE],
+    ),
+    (
+        "docs/heading.md",
+        "Using BaseService",  # mentioned in the heading only
+        1,
+        ["Always pass the repositories in.", "It is simple."],
+        [BASE],
+    ),
+    (
+        "docs/init.md",
+        "Init",
+        1,
+        ["Never call `BaseService.__init__` twice."],
+        [f"{BASE}.__init__"],  # a member of the start set
+    ),
+    (
+        "docs/routes.md",
+        "Routes",
+        1,
+        ["Routes should stay thin.", "`get_order` must not touch the database."],
+        ["app.routes.orders.api.get_order"],  # a dependent at distance 2
+    ),
+    (
+        "docs/models.md",
+        "Models",
+        1,
+        ["Never rename `Order` columns."],
+        ["app.db.models.orders.Order"],  # unrelated to BaseService
+    ),
+]
+
+
+def with_docs() -> GraphBatch:
+    nodes, edges = [], []
+    for path, heading_path, start, body, mentioned in DOCS:
+        node_id = doc_id("layered_app", path, heading_path)
+        nodes.append(
+            DocNode(
+                id=node_id,
+                codebase="layered_app",
+                path=path,
+                heading_path=heading_path,
+                anchor=heading_path,
+                text="\n".join(body),
+                start_line=start,
+                end_line=start + len(body),
+            )
+        )
+        edges.extend(
+            Edge(
+                kind="MENTIONS", source=node_id, target=code_id("layered_app", q), match="qualname"
+            )
+            for q in mentioned
+        )
+    return replace(LAYERED, nodes=LAYERED.nodes + tuple(nodes), edges=LAYERED.edges + tuple(edges))
+
+
+@pytest.fixture
+def documented(driver: Driver) -> Driver:
+    ensure_schema(driver)
+    replace_codebase(driver, with_docs())
+    return driver
+
+
+def mentioned(
+    stance: str, quote: str, path: str, heading_path: str, lines: tuple[int, int]
+) -> Guideline:
+    return Guideline(
+        stance=stance,  # type: ignore[arg-type]
+        quote=quote,
+        citation=Citation(
+            path=path, heading_path=heading_path, start_line=lines[0], end_line=lines[1]
+        ),
+        matched_on="mention",
+    )
+
+
+BASE_GUIDELINES = [
+    # the symbol itself first (by path), then a member, then the closest dependent
+    mentioned(
+        "encourages",
+        "Always pass the repositories in.",
+        "docs/heading.md",
+        "Using BaseService",
+        (2, 2),
+    ),
+    mentioned(
+        "related",
+        "You don't need to subclass `BaseService` in scripts.",
+        "docs/scripts.md",
+        "Scripts",
+        (2, 2),
+    ),
+    mentioned(
+        "encourages",
+        "Every service must inherit from `BaseService`.",
+        "docs/services.md",
+        "Guide > Services",
+        (12, 12),
+    ),
+    mentioned(
+        "forbids",
+        "Never construct `BaseService` directly; use a subclass.",
+        "docs/services.md",
+        "Guide > Services",
+        (13, 14),
+    ),
+    mentioned(
+        "forbids", "Never call `BaseService.__init__` twice.", "docs/init.md", "Init", (2, 2)
+    ),
+    mentioned(
+        "forbids", "`get_order` must not touch the database.", "docs/routes.md", "Routes", (3, 3)
+    ),
+]
+
+
+def test_docs_mentioning_the_change_give_cited_sentences_with_a_stance(
+    documented: Driver,
+) -> None:
+    result = check(documented, "Rename it.", ["BaseService"])
+
+    assert result.guidelines == BASE_GUIDELINES
+    assert result.truncated is False
+
+
+def test_guidelines_are_capped(documented: Driver, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(change, "MAX_GUIDELINES", 3)
+    result = check(documented, "Rename it.", ["BaseService"])
+
+    assert result.guidelines == BASE_GUIDELINES[:3]
+    assert result.truncated is True
+
+
+def test_nothing_resolved_gives_no_mention_guidelines(documented: Driver) -> None:
+    result = check(documented, "Rename it.", ["NoSuchThing"])
+
+    assert [g for g in result.guidelines if g.matched_on == "mention"] == []

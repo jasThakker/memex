@@ -23,7 +23,7 @@ _NAME = re.compile(r"(?<![\w.])" + _DOTTED.pattern)
 _CAMEL = re.compile(r"[a-z][A-Z]|[A-Z]{2}[a-z]")
 
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-Z`])")
 _ABBREVIATIONS = ("e.g.", "i.e.")
 
 _APOSTROPHE = "['’]"
@@ -67,7 +67,8 @@ def code_tokens(description: str) -> list[str]:
 def sentences(text: str, first_line: int) -> list[Sentence]:
     """The sentences of a section body whose first line is `first_line`. Fenced code is
     skipped; a blank line, a list item or a table row starts a new unit; a unit is split
-    after `.`, `!` or `?` followed by a capital letter, except after `e.g.` and `i.e.`."""
+    after `.`, `!` or `?` followed by a capital letter or a backtick, except after `e.g.`
+    and `i.e.`."""
     units: list[list[tuple[int, str]]] = []
     current: list[tuple[int, str]] = []
 

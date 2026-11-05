@@ -73,6 +73,13 @@ def test_sentence_lines_are_offset_by_the_first_line() -> None:
     ]
 
 
+def test_a_sentence_may_start_with_a_code_span() -> None:
+    assert sentences("Keep routes thin. `get_order` must not touch the database.", 1) == [
+        Sentence("Keep routes thin.", 1, 1),
+        Sentence("`get_order` must not touch the database.", 1, 1),
+    ]
+
+
 @pytest.mark.parametrize(
     ("sentence", "expected"),
     [
