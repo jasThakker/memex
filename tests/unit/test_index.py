@@ -79,11 +79,11 @@ def test_every_code_node_carries_its_module_labels() -> None:
     assert mismatched == []
 
 
-def test_batch_holds_defines_imports_and_inherits_edges_and_externals() -> None:
+def test_batch_holds_every_code_edge_kind_and_externals() -> None:
     kinds = Counter(edge.kind for edge in LAYERED.edges)
     externals = {node.name for node in LAYERED.nodes if isinstance(node, ExternalNode)}
 
-    assert set(kinds) == {"DEFINES", "IMPORTS", "INHERITS"}
+    assert set(kinds) == {"DEFINES", "IMPORTS", "INHERITS", "CALLS"}
     assert kinds["DEFINES"] == len(by_qualname(LAYERED)) - 27  # one per class or function
     assert "pydantic.BaseModel" in externals
 

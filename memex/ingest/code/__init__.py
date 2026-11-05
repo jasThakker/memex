@@ -9,13 +9,13 @@ from memex.config import Codebase
 from memex.graph.model import CodebaseNode, GraphBatch, IndexStats, ModuleNode, ParseError
 from memex.ingest.code.classify import classify
 from memex.ingest.code.parser import ParsedModule, parse_module
-from memex.ingest.code.resolver import SymbolTable, link_imports, link_inherits
+from memex.ingest.code.resolver import SymbolTable, link_calls, link_imports, link_inherits
 from memex.ingest.code.walker import walk
 
 
 def index_code(codebase: Codebase) -> GraphBatch:
-    """Every module, class and function of a codebase with its DEFINES, IMPORTS and INHERITS
-    edges, and the External nodes those point at (one per id).
+    """Every module, class and function of a codebase with its DEFINES, IMPORTS, INHERITS and
+    CALLS edges, the External nodes those point at (one per id) and the unresolved call count.
 
     A file that fails to parse is recorded in the stats and skipped. Node ids are unique:
     if a definition has the id of a module (say `def utils()` in `pkg/__init__.py` next to
@@ -34,7 +34,9 @@ def index_code(codebase: Codebase) -> GraphBatch:
 
     modules, dropped = _labeled_without_duplicates(codebase, parsed)
     imports, import_externals = link_imports(codebase.name, modules)
-    inherits, inherit_externals = link_inherits(codebase.name, SymbolTable(modules))
+    symbols = SymbolTable(modules)
+    inherits, inherit_externals = link_inherits(codebase.name, symbols)
+    calls, unresolved_calls = link_calls(codebase.name, symbols)
     externals = {node.id: node for node in (*import_externals, *inherit_externals)}
     code_nodes = [node for module in modules for node in module.nodes]
     defines = [edge for module in modules for edge in module.defines]
@@ -55,6 +57,7 @@ def index_code(codebase: Codebase) -> GraphBatch:
     stats = IndexStats(
         files=len(sources),
         parse_errors=tuple(errors),
+        unresolved_calls=unresolved_calls,
         dropped_duplicates=tuple(dropped),
         layers=dict(Counter(node.layer for node in module_nodes if node.layer)),
         domains=dict(Counter(node.domain for node in module_nodes if node.domain)),
@@ -62,7 +65,7 @@ def index_code(codebase: Codebase) -> GraphBatch:
     return GraphBatch(
         codebase=codebase.name,
         nodes=(codebase_node, *code_nodes, *externals.values()),
-        edges=(*defines, *imports, *inherits),
+        edges=(*defines, *imports, *inherits, *calls),
         stats=stats,
     )
 
