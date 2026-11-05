@@ -138,6 +138,7 @@ class IndexStats:
     files: int = 0
     parse_errors: tuple[ParseError, ...] = ()
     unresolved_calls: int = 0
+    dropped_duplicates: tuple[str, ...] = ()  # definitions whose id a module already had
     layers: Mapping[str, int] = field(default_factory=dict)
     domains: Mapping[str, int] = field(default_factory=dict)
 
