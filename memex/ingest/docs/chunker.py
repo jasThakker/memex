@@ -93,6 +93,29 @@ def plain_heading(raw: str) -> str:
     return " ".join("".join(parts).split())
 
 
+def outside_fences(text: str) -> str:
+    """The text with every line of fenced code, fence lines included, blanked out."""
+    kept: list[str] = []
+    fence: str | None = None
+    for line in text.splitlines():
+        if fence is not None:
+            if _closes(fence, line):
+                fence = None
+            kept.append("")
+        elif match := _FENCE.match(line):
+            fence = match.group(1)
+            kept.append("")
+        else:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def _closes(fence: str, line: str) -> bool:
+    """A closing fence: at least as many of the same character, and nothing else."""
+    stripped = line.strip()
+    return stripped.startswith(fence) and set(stripped) == {fence[0]}
+
+
 def _without_emphasis(text: str) -> str:
     for pattern in _EMPHASIS:
         text = pattern.sub(r"\1", text)
@@ -117,8 +140,7 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
     for index in range(start, len(lines)):
         line = lines[index]
         if fence is not None:
-            stripped = line.strip()
-            if stripped.startswith(fence) and set(stripped) == {fence[0]}:
+            if _closes(fence, line):
                 fence = None
             continue
         if match := _FENCE.match(line):
