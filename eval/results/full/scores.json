@@ -1,0 +1,1371 @@
+{
+  "summary": {
+    "A": {
+      "runs": 12,
+      "invalid": 0,
+      "answered": 12,
+      "errors": 0,
+      "precision": 0.6361986697513013,
+      "recall": 0.7915584415584416,
+      "f1": 0.6802693602693602,
+      "by_category": {
+        "callers": {
+          "precision": 0.9166666666666666,
+          "recall": 1.0,
+          "f1": 0.9555555555555556
+        },
+        "check_change": {
+          "precision": 0.4857142857142857,
+          "recall": 0.7922077922077921,
+          "f1": 0.5927272727272728
+        },
+        "doc_rules": {
+          "precision": 1.0,
+          "recall": 0.8571428571428572,
+          "f1": 0.9166666666666666
+        },
+        "layer_domain": {
+          "precision": 0.05263157894736842,
+          "recall": 0.2,
+          "f1": 0.08333333333333333
+        },
+        "locate": {
+          "precision": 0.6025641025641025,
+          "recall": 0.9333333333333333,
+          "f1": 0.7037037037037037
+        }
+      },
+      "usage": {
+        "input_tokens": 90,
+        "output_tokens": 23036,
+        "cache_creation_tokens": 110685,
+        "cache_read_tokens": 391094,
+        "total_input": 501869,
+        "cost_usd": 0.712389,
+        "turns": 80,
+        "duration_ms": 176621
+      },
+      "estimated_usage": 0
+    },
+    "B": {
+      "runs": 12,
+      "invalid": 0,
+      "answered": 12,
+      "errors": 0,
+      "precision": 0.5356030543530543,
+      "recall": 0.7635822510822511,
+      "f1": 0.5977567132739546,
+      "by_category": {
+        "callers": {
+          "precision": 0.9583333333333334,
+          "recall": 1.0,
+          "f1": 0.9777777777777777
+        },
+        "check_change": {
+          "precision": 0.4222222222222222,
+          "recall": 0.7922077922077921,
+          "f1": 0.5485893416927901
+        },
+        "doc_rules": {
+          "precision": 0.625,
+          "recall": 0.5892857142857143,
+          "f1": 0.5727272727272728
+        },
+        "layer_domain": {
+          "precision": 0.06818181818181818,
+          "recall": 0.3,
+          "f1": 0.11111111111111109
+        },
+        "locate": {
+          "precision": 0.44047619047619047,
+          "recall": 0.9333333333333333,
+          "f1": 0.5916305916305916
+        }
+      },
+      "usage": {
+        "input_tokens": 114,
+        "output_tokens": 21151,
+        "cache_creation_tokens": 132304,
+        "cache_read_tokens": 569055,
+        "total_input": 701473,
+        "cost_usd": 0.797859,
+        "turns": 97,
+        "duration_ms": 180121
+      },
+      "estimated_usage": 0
+    }
+  },
+  "baselines": {
+    "A": {
+      "error": false,
+      "problem": null,
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcp_servers": [],
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 4,
+        "cache_creation_tokens": 2293,
+        "cache_read_tokens": 3223,
+        "total_input": 5518,
+        "cost_usd": 0.009538,
+        "turns": 1,
+        "duration_ms": 1590
+      }
+    },
+    "B": {
+      "error": false,
+      "problem": null,
+      "tools": [
+        "Read",
+        "mcp__memex__callees",
+        "mcp__memex__callers",
+        "mcp__memex__check_change",
+        "mcp__memex__find_symbol",
+        "mcp__memex__impact_of",
+        "mcp__memex__list_codebases",
+        "mcp__memex__search_docs"
+      ],
+      "mcp_servers": [
+        [
+          "memex",
+          "connected"
+        ]
+      ],
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 4,
+        "cache_creation_tokens": 2607,
+        "cache_read_tokens": 3374,
+        "total_input": 5983,
+        "cost_usd": 0.010809,
+        "turns": 1,
+        "duration_ms": 1289
+      }
+    }
+  },
+  "runs": [
+    {
+      "id": "q01",
+      "category": "locate",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.5714285714285714,
+        "recall": 1.0,
+        "f1": 0.7272727272727273
+      },
+      "docs": {
+        "precision": 0.0,
+        "recall": 1.0,
+        "f1": 0.0
+      },
+      "combined": {
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.6666666666666666
+      },
+      "missed": [],
+      "extra": [
+        "docs/docs/contributors/guides/ingredient-parser.md#Alternative Parsers",
+        "mealie.services.parser_services._base.ABCIngredientParser.parse",
+        "mealie.services.parser_services._base.ABCIngredientParser.parse_one",
+        "mealie.services.parser_services.ingredient_parser.get_parser"
+      ],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1466,
+        "cache_creation_tokens": 5053,
+        "cache_read_tokens": 26653,
+        "total_input": 31714,
+        "cost_usd": 0.037553,
+        "turns": 5,
+        "duration_ms": 10769
+      },
+      "tool_calls": {
+        "Grep": 4
+      }
+    },
+    {
+      "id": "q01",
+      "category": "locate",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.6666666666666666,
+        "recall": 1.0,
+        "f1": 0.8
+      },
+      "docs": {
+        "precision": 0.0,
+        "recall": 1.0,
+        "f1": 0.0
+      },
+      "combined": {
+        "precision": 0.5714285714285714,
+        "recall": 1.0,
+        "f1": 0.7272727272727273
+      },
+      "missed": [],
+      "extra": [
+        "docs/docs/contributors/guides/ingredient-parser.md#Alternative Parsers",
+        "mealie.services.parser_services._base.ABCIngredientParser.find_ingredient_match",
+        "mealie.services.parser_services.ingredient_parser.get_parser"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 891,
+        "cache_creation_tokens": 3901,
+        "cache_read_tokens": 18627,
+        "total_input": 22534,
+        "cost_usd": 0.026389,
+        "turns": 4,
+        "duration_ms": 8693
+      },
+      "tool_calls": {
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q02",
+      "category": "locate",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.3076923076923077,
+        "recall": 0.8,
+        "f1": 0.4444444444444444
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.3076923076923077,
+        "recall": 0.8,
+        "f1": 0.4444444444444444
+      },
+      "missed": [
+        "mealie.repos.repository_factory.AllRepositories"
+      ],
+      "extra": [
+        "mealie.core.dependencies.dependencies.get_admin_user",
+        "mealie.core.dependencies.dependencies.get_current_user",
+        "mealie.repos.all_repositories.AllRepositories",
+        "mealie.repos.all_repositories.get_repositories",
+        "mealie.routes._base.base_controllers.BaseAdminController",
+        "mealie.routes._base.base_controllers.BaseUserController",
+        "mealie.routes._base.base_controllers._BaseController",
+        "mealie.routes._base.base_controllers._BaseController.group_id",
+        "mealie.routes._base.base_controllers._BaseController.household_id"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1457,
+        "cache_creation_tokens": 5716,
+        "cache_read_tokens": 17769,
+        "total_input": 23491,
+        "cost_usd": 0.039223,
+        "turns": 4,
+        "duration_ms": 11555
+      },
+      "tool_calls": {
+        "Grep": 2,
+        "Read": 1
+      }
+    },
+    {
+      "id": "q02",
+      "category": "locate",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.25,
+        "recall": 0.8,
+        "f1": 0.38095238095238093
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.25,
+        "recall": 0.8,
+        "f1": 0.38095238095238093
+      },
+      "missed": [
+        "mealie.repos.repository_factory.AllRepositories"
+      ],
+      "extra": [
+        "mealie.core.dependencies.dependencies.get_admin_user",
+        "mealie.core.dependencies.dependencies.get_current_user",
+        "mealie.db.db_setup.generate_session",
+        "mealie.repos._utils.NOT_SET",
+        "mealie.repos.all_repositories.AllRepositories",
+        "mealie.routes._base.base_controllers.BaseAdminController",
+        "mealie.routes._base.base_controllers.BaseUserController",
+        "mealie.routes._base.base_controllers.BaseUserController.group",
+        "mealie.routes._base.base_controllers.BaseUserController.household",
+        "mealie.routes._base.base_controllers._BaseController",
+        "mealie.routes._base.base_controllers._BaseController.group_id",
+        "mealie.routes._base.base_controllers._BaseController.household_id"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1296,
+        "cache_creation_tokens": 5586,
+        "cache_read_tokens": 18669,
+        "total_input": 24261,
+        "cost_usd": 0.037183,
+        "turns": 5,
+        "duration_ms": 9913
+      },
+      "tool_calls": {
+        "Read": 1,
+        "mcp__memex__find_symbol": 2,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q03",
+      "category": "locate",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 4,
+        "output_tokens": 471,
+        "cache_creation_tokens": 1633,
+        "cache_read_tokens": 10688,
+        "total_input": 12325,
+        "cost_usd": 0.012319,
+        "turns": 2,
+        "duration_ms": 10409
+      },
+      "tool_calls": {
+        "Grep": 1
+      }
+    },
+    {
+      "id": "q03",
+      "category": "locate",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.6666666666666666
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.6666666666666666
+      },
+      "missed": [],
+      "extra": [
+        "mealie.routes._base.controller",
+        "mealie.routes._base.mixins"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 533,
+        "cache_creation_tokens": 3596,
+        "cache_read_tokens": 18345,
+        "total_input": 21947,
+        "cost_usd": 0.02156,
+        "turns": 4,
+        "duration_ms": 9059
+      },
+      "tool_calls": {
+        "mcp__memex__find_symbol": 2,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q04",
+      "category": "callers",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.875,
+        "recall": 1.0,
+        "f1": 0.9333333333333333
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.875,
+        "recall": 1.0,
+        "f1": 0.9333333333333333
+      },
+      "missed": [],
+      "extra": [
+        "mealie.services.recipe.recipe_service.RecipeService.create_one"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 2347,
+        "cache_creation_tokens": 10711,
+        "cache_read_tokens": 21518,
+        "total_input": 32235,
+        "cost_usd": 0.068478,
+        "turns": 8,
+        "duration_ms": 15438
+      },
+      "tool_calls": {
+        "Grep": 7
+      }
+    },
+    {
+      "id": "q04",
+      "category": "callers",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 18,
+        "output_tokens": 3117,
+        "cache_creation_tokens": 26432,
+        "cache_read_tokens": 133205,
+        "total_input": 159655,
+        "cost_usd": 0.150255,
+        "turns": 14,
+        "duration_ms": 25277
+      },
+      "tool_calls": {
+        "Read": 3,
+        "mcp__memex__callers": 4,
+        "mcp__memex__find_symbol": 4,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q05",
+      "category": "callers",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.875,
+        "recall": 1.0,
+        "f1": 0.9333333333333333
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.875,
+        "recall": 1.0,
+        "f1": 0.9333333333333333
+      },
+      "missed": [],
+      "extra": [
+        "mealie.services.parser_services._base.DataMatcher"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1493,
+        "cache_creation_tokens": 4608,
+        "cache_read_tokens": 18230,
+        "total_input": 22844,
+        "cost_usd": 0.035197,
+        "turns": 5,
+        "duration_ms": 11628
+      },
+      "tool_calls": {
+        "Grep": 4
+      }
+    },
+    {
+      "id": "q05",
+      "category": "callers",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.875,
+        "recall": 1.0,
+        "f1": 0.9333333333333333
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.875,
+        "recall": 1.0,
+        "f1": 0.9333333333333333
+      },
+      "missed": [],
+      "extra": [
+        "mealie.services.parser_services._base.DataMatcher"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 744,
+        "cache_creation_tokens": 3223,
+        "cache_read_tokens": 18325,
+        "total_input": 21554,
+        "cost_usd": 0.022177,
+        "turns": 3,
+        "duration_ms": 6218
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q06",
+      "category": "callers",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1033,
+        "cache_creation_tokens": 3323,
+        "cache_read_tokens": 17642,
+        "total_input": 20971,
+        "cost_usd": 0.025398,
+        "turns": 4,
+        "duration_ms": 8303
+      },
+      "tool_calls": {
+        "Grep": 3
+      }
+    },
+    {
+      "id": "q06",
+      "category": "callers",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1359,
+        "cache_creation_tokens": 9719,
+        "cache_read_tokens": 28044,
+        "total_input": 37771,
+        "cost_usd": 0.055286,
+        "turns": 6,
+        "duration_ms": 11186
+      },
+      "tool_calls": {
+        "Grep": 1,
+        "Read": 2,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q07",
+      "category": "layer_domain",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "missed": [
+        "mealie.routes.admin.admin_debug",
+        "mealie.routes.admin.admin_management_ai_providers",
+        "mealie.routes.groups.controller_group_ai_providers",
+        "mealie.services.parser_services.openai.parser",
+        "mealie.services.recipe.ai_recipe_service",
+        "mealie.services.scraper.scraper_strategies"
+      ],
+      "extra": [
+        "mealie.routes.admin.admin_debug.AdminDebugController.debug_openai",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController.delete_ai_prompt",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController.get_ai_prompts",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController.update_ai_prompt",
+        "mealie.routes.groups.controller_group_ai_providers.GroupAIPromptController.service",
+        "mealie.routes.groups.controller_group_ai_providers.GroupAIProviderController.test_ai_provider",
+        "mealie.routes.groups.controller_group_ai_providers.GroupAIProviderController.test_saved_ai_provider",
+        "mealie.services.openai.openai.OpenAIService",
+        "mealie.services.parser_services.openai.parser.OpenAIParser._parse",
+        "mealie.services.recipe.ai_recipe_service.AIRecipeService.build_recipe",
+        "mealie.services.scraper.scraper_strategies.RecipeScraperOpenAI.build_context",
+        "mealie.services.scraper.scraper_strategies.RecipeScraperOpenAITranscription.parse"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 2499,
+        "cache_creation_tokens": 9165,
+        "cache_read_tokens": 20765,
+        "total_input": 29936,
+        "cost_usd": 0.063739,
+        "turns": 8,
+        "duration_ms": 15069
+      },
+      "tool_calls": {
+        "Grep": 7
+      }
+    },
+    {
+      "id": "q07",
+      "category": "layer_domain",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "missed": [
+        "mealie.routes.admin.admin_debug",
+        "mealie.routes.admin.admin_management_ai_providers",
+        "mealie.routes.groups.controller_group_ai_providers",
+        "mealie.services.parser_services.openai.parser",
+        "mealie.services.recipe.ai_recipe_service",
+        "mealie.services.scraper.scraper_strategies"
+      ],
+      "extra": [
+        "mealie.routes.admin.admin_debug.AdminDebugController.debug_openai",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController.delete_ai_prompt",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController.get_ai_prompts",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController.update_ai_prompt",
+        "mealie.routes.groups.controller_group_ai_providers.GroupAIPromptController.service",
+        "mealie.routes.groups.controller_group_ai_providers.GroupAIProviderController.test_ai_provider",
+        "mealie.routes.groups.controller_group_ai_providers.GroupAIProviderController.test_saved_ai_provider",
+        "mealie.services.openai.openai.OpenAIService",
+        "mealie.services.parser_services.openai.parser.OpenAIParser._parse",
+        "mealie.services.recipe.ai_recipe_service.AIRecipeService.build_recipe",
+        "mealie.services.scraper.scraper_strategies.RecipeScraperOpenAI.build_context",
+        "mealie.services.scraper.scraper_strategies.RecipeScraperOpenAITranscription.parse"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1254,
+        "cache_creation_tokens": 4291,
+        "cache_read_tokens": 18359,
+        "total_input": 22656,
+        "cost_usd": 0.031552,
+        "turns": 4,
+        "duration_ms": 9299
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "q08",
+      "category": "layer_domain",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.10526315789473684,
+        "recall": 0.5,
+        "f1": 0.17391304347826086
+      },
+      "docs": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "combined": {
+        "precision": 0.10526315789473684,
+        "recall": 0.4,
+        "f1": 0.16666666666666666
+      },
+      "missed": [
+        "AGENTS.md#Cross-Cutting Concerns",
+        "mealie.repos.repository_generic.GroupRepositoryGeneric.__init__",
+        "mealie.repos.repository_generic.HouseholdRepositoryGeneric.__init__"
+      ],
+      "extra": [
+        "mealie.repos.repository_factory.AllRepositories",
+        "mealie.repos.repository_generic.GroupRepositoryGeneric",
+        "mealie.repos.repository_generic.HouseholdRepositoryGeneric",
+        "mealie.repos.repository_generic.RepositoryGeneric",
+        "mealie.repos.repository_generic.RepositoryGeneric._query",
+        "mealie.repos.repository_generic.RepositoryGeneric.delete",
+        "mealie.repos.repository_generic.RepositoryGeneric.delete_many",
+        "mealie.repos.repository_generic.RepositoryGeneric.get_all",
+        "mealie.repos.repository_generic.RepositoryGeneric.get_one",
+        "mealie.repos.repository_generic.RepositoryGeneric.multi_query",
+        "mealie.repos.repository_generic.RepositoryGeneric.page_all",
+        "mealie.routes._base.base_controllers.BaseAdminController",
+        "mealie.routes._base.base_controllers.BasePublicHouseholdExploreController.cross_household_repos",
+        "mealie.routes._base.base_controllers.BaseUserController",
+        "mealie.routes._base.base_controllers.BaseUserController.group_id",
+        "mealie.routes._base.base_controllers.BaseUserController.household_id",
+        "mealie.routes._base.base_controllers._BaseController.repos"
+      ],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3208,
+        "cache_creation_tokens": 10844,
+        "cache_read_tokens": 58588,
+        "total_input": 69444,
+        "cost_usd": 0.081339,
+        "turns": 11,
+        "duration_ms": 24365
+      },
+      "tool_calls": {
+        "Grep": 6,
+        "Read": 4
+      }
+    },
+    {
+      "id": "q08",
+      "category": "layer_domain",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.09523809523809523,
+        "recall": 0.5,
+        "f1": 0.16
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.13636363636363635,
+        "recall": 0.6,
+        "f1": 0.22222222222222218
+      },
+      "missed": [
+        "mealie.repos.repository_generic.GroupRepositoryGeneric.__init__",
+        "mealie.repos.repository_generic.HouseholdRepositoryGeneric.__init__"
+      ],
+      "extra": [
+        "mealie.repos._recipe_suggestions.RecipeSuggestionMixin._filter_builder",
+        "mealie.repos.all_repositories.get_repositories",
+        "mealie.repos.repository_factory.AllRepositories",
+        "mealie.repos.repository_factory.AllRepositories.__init__",
+        "mealie.repos.repository_generic.GroupRepositoryGeneric",
+        "mealie.repos.repository_generic.HouseholdRepositoryGeneric",
+        "mealie.repos.repository_generic.RepositoryGeneric",
+        "mealie.repos.repository_generic.RepositoryGeneric._query_one",
+        "mealie.repos.repository_generic.RepositoryGeneric.delete_many",
+        "mealie.repos.repository_generic.RepositoryGeneric.get_one",
+        "mealie.repos.repository_generic.RepositoryGeneric.multi_query",
+        "mealie.repos.repository_generic.RepositoryGeneric.page_all",
+        "mealie.repos.repository_generic.RepositoryGeneric.update_many",
+        "mealie.routes._base.base_controllers.BaseAdminController",
+        "mealie.routes._base.base_controllers.BasePublicGroupExploreController",
+        "mealie.routes._base.base_controllers.BasePublicHouseholdExploreController.cross_household_repos",
+        "mealie.routes._base.base_controllers.BaseUserController",
+        "mealie.routes._base.base_controllers._BaseController",
+        "mealie.routes._base.base_controllers._BaseController.repos"
+      ],
+      "usage": {
+        "input_tokens": 16,
+        "output_tokens": 3566,
+        "cache_creation_tokens": 20831,
+        "cache_read_tokens": 98507,
+        "total_input": 119354,
+        "cost_usd": 0.128867,
+        "turns": 17,
+        "duration_ms": 29718
+      },
+      "tool_calls": {
+        "Grep": 1,
+        "Read": 8,
+        "mcp__memex__callees": 1,
+        "mcp__memex__find_symbol": 4,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "q09",
+      "category": "doc_rules",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1189,
+        "cache_creation_tokens": 4754,
+        "cache_read_tokens": 27335,
+        "total_input": 32097,
+        "cost_usd": 0.033656,
+        "turns": 6,
+        "duration_ms": 10510
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 2
+      }
+    },
+    {
+      "id": "q09",
+      "category": "doc_rules",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.6666666666666666,
+        "recall": 1.0,
+        "f1": 0.8
+      },
+      "docs": {
+        "precision": 0.3333333333333333,
+        "recall": 0.5,
+        "f1": 0.4
+      },
+      "combined": {
+        "precision": 0.5,
+        "recall": 0.75,
+        "f1": 0.6
+      },
+      "missed": [
+        "AGENTS.md#Backend Architecture (mealie/)"
+      ],
+      "extra": [
+        "AGENTS.md#Database & Sessions",
+        "AGENTS.md#What to Review",
+        "mealie.repos.repository_factory.AllRepositories"
+      ],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1075,
+        "cache_creation_tokens": 9098,
+        "cache_read_tokens": 31801,
+        "total_input": 40907,
+        "cost_usd": 0.050338,
+        "turns": 7,
+        "duration_ms": 11169
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__find_symbol": 2,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "q10",
+      "category": "doc_rules",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 0.7142857142857143,
+        "f1": 0.8333333333333333
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 0.7142857142857143,
+        "f1": 0.8333333333333333
+      },
+      "missed": [
+        "AGENTS.md#Backend Architecture (mealie/)",
+        "AGENTS.md#Frontend"
+      ],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1239,
+        "cache_creation_tokens": 8375,
+        "cache_read_tokens": 32623,
+        "total_input": 41006,
+        "cost_usd": 0.049168,
+        "turns": 5,
+        "duration_ms": 13993
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 1
+      }
+    },
+    {
+      "id": "q10",
+      "category": "doc_rules",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.0,
+        "recall": 1.0,
+        "f1": 0.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 0.42857142857142855,
+        "f1": 0.6
+      },
+      "combined": {
+        "precision": 0.75,
+        "recall": 0.42857142857142855,
+        "f1": 0.5454545454545454
+      },
+      "missed": [
+        "AGENTS.md#Backend Architecture (mealie/)",
+        "AGENTS.md#Before Submitting a PR",
+        "AGENTS.md#Essential Commands (via Task/Taskfile.yml)",
+        "AGENTS.md#Frontend"
+      ],
+      "extra": [
+        "mealie.schema"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 713,
+        "cache_creation_tokens": 4434,
+        "cache_read_tokens": 18837,
+        "total_input": 23277,
+        "cost_usd": 0.026762,
+        "turns": 3,
+        "duration_ms": 7928
+      },
+      "tool_calls": {
+        "Read": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "q11",
+      "category": "check_change",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.6666666666666666,
+        "recall": 1.0,
+        "f1": 0.8
+      },
+      "docs": {
+        "precision": 0.4,
+        "recall": 0.4,
+        "f1": 0.4000000000000001
+      },
+      "combined": {
+        "precision": 0.5714285714285714,
+        "recall": 0.7272727272727273,
+        "f1": 0.64
+      },
+      "missed": [
+        "AGENTS.md#What to Review",
+        "docs/docs/contributors/developers-guide/code-contributions.md#We Use GitHub Flow, So All Code Changes Happen Through Pull Requests",
+        "docs/docs/contributors/developers-guide/database-changes.md#Overview"
+      ],
+      "extra": [
+        "AGENTS.md#Common Gotchas",
+        "AGENTS.md#Database Changes",
+        "docs/docs/documentation/getting-started/installation/ai-providers.md#Configuration",
+        "mealie.alembic.versions.2026-05-18-16.27.05_2187537c52b8_add_table_for_ai_providers",
+        "mealie.schema.group.ai_providers.AIProviderOut",
+        "mealie.services.openai.openai.OpenAIService.test_connection"
+      ],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 3725,
+        "cache_creation_tokens": 26894,
+        "cache_read_tokens": 75954,
+        "total_input": 102858,
+        "cost_usd": 0.152441,
+        "turns": 12,
+        "duration_ms": 24590
+      },
+      "tool_calls": {
+        "Grep": 5,
+        "Read": 6
+      }
+    },
+    {
+      "id": "q11",
+      "category": "check_change",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.46153846153846156,
+        "recall": 1.0,
+        "f1": 0.631578947368421
+      },
+      "docs": {
+        "precision": 0.4,
+        "recall": 0.4,
+        "f1": 0.4000000000000001
+      },
+      "combined": {
+        "precision": 0.4444444444444444,
+        "recall": 0.7272727272727273,
+        "f1": 0.5517241379310345
+      },
+      "missed": [
+        "AGENTS.md#What to Review",
+        "docs/docs/contributors/developers-guide/code-contributions.md#We Use GitHub Flow, So All Code Changes Happen Through Pull Requests",
+        "docs/docs/contributors/developers-guide/database-changes.md#Overview"
+      ],
+      "extra": [
+        "AGENTS.md#Backend Architecture (mealie/)",
+        "docs/docs/contributors/developers-guide/database-changes.md#Development: Database Changes",
+        "docs/docs/documentation/getting-started/installation/ai-providers.md#Configuration",
+        "mealie.repos.repository_ai_provider.GroupRepositoryAIProvider",
+        "mealie.routes.admin.admin_debug.AdminDebugController.debug_openai",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController",
+        "mealie.schema.group.ai_providers.AIProviderOut",
+        "mealie.schema.group.ai_providers.AIProviderSave",
+        "mealie.schema.group.ai_providers.AIProviderUpdate",
+        "mealie.services.openai.openai.OpenAIService.test_connection"
+      ],
+      "usage": {
+        "input_tokens": 16,
+        "output_tokens": 3739,
+        "cache_creation_tokens": 30801,
+        "cache_read_tokens": 109956,
+        "total_input": 140773,
+        "cost_usd": 0.171622,
+        "turns": 17,
+        "duration_ms": 27184
+      },
+      "tool_calls": {
+        "Read": 5,
+        "mcp__memex__check_change": 1,
+        "mcp__memex__find_symbol": 6,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 3
+      }
+    },
+    {
+      "id": "q12",
+      "category": "check_change",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.38461538461538464,
+        "recall": 1.0,
+        "f1": 0.5555555555555556
+      },
+      "docs": {
+        "precision": 0.5,
+        "recall": 0.5,
+        "f1": 0.5
+      },
+      "combined": {
+        "precision": 0.4,
+        "recall": 0.8571428571428571,
+        "f1": 0.5454545454545455
+      },
+      "missed": [
+        "AGENTS.md#Cross-Cutting Concerns"
+      ],
+      "extra": [
+        "docs/docs/contributors/guides/ingredient-parser.md#Improving the Ingredient Parser",
+        "mealie.schema.recipe.recipe_ingredient.IngredientRequest",
+        "mealie.schema.recipe.recipe_ingredient.IngredientsRequest",
+        "mealie.services.parser_services._base.ABCIngredientParser.find_ingredient_match",
+        "mealie.services.parser_services._base.ABCIngredientParser.parse",
+        "mealie.services.parser_services._base.ABCIngredientParser.parse_one",
+        "mealie.services.parser_services.ingredient_parser.BruteForceParser",
+        "mealie.services.parser_services.ingredient_parser.NLPParser",
+        "mealie.services.parser_services.openai.parser.OpenAIParser"
+      ],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 2909,
+        "cache_creation_tokens": 19609,
+        "cache_read_tokens": 63329,
+        "total_input": 82948,
+        "cost_usd": 0.113879,
+        "turns": 10,
+        "duration_ms": 19992
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 6
+      }
+    },
+    {
+      "id": "q12",
+      "category": "check_change",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.4166666666666667,
+        "recall": 1.0,
+        "f1": 0.5882352941176471
+      },
+      "docs": {
+        "precision": 0.3333333333333333,
+        "recall": 0.5,
+        "f1": 0.4
+      },
+      "combined": {
+        "precision": 0.4,
+        "recall": 0.8571428571428571,
+        "f1": 0.5454545454545455
+      },
+      "missed": [
+        "AGENTS.md#Cross-Cutting Concerns"
+      ],
+      "extra": [
+        "docs/docs/contributors/guides/ingredient-parser.md#Improving The CRF Parser",
+        "docs/docs/documentation/getting-started/installation/ai-providers.md#AI Features",
+        "mealie.schema.recipe.recipe_ingredient.IngredientRequest",
+        "mealie.schema.recipe.recipe_ingredient.IngredientsRequest",
+        "mealie.services.parser_services._base.ABCIngredientParser.parse",
+        "mealie.services.parser_services._base.ABCIngredientParser.parse_one",
+        "mealie.services.parser_services.ingredient_parser.BruteForceParser",
+        "mealie.services.parser_services.ingredient_parser.NLPParser",
+        "mealie.services.parser_services.openai.parser.OpenAIParser"
+      ],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 2864,
+        "cache_creation_tokens": 10392,
+        "cache_read_tokens": 56380,
+        "total_input": 66784,
+        "cost_usd": 0.07587,
+        "turns": 13,
+        "duration_ms": 24477
+      },
+      "tool_calls": {
+        "Read": 5,
+        "mcp__memex__callers": 1,
+        "mcp__memex__find_symbol": 2,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 2
+      }
+    }
+  ]
+}
