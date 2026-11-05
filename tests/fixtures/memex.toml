@@ -4,6 +4,7 @@
 root = "layered_app"
 packages = ["app"]
 exclude = ["**/tests/**", "app/migrations/**"]
+docs = ["AGENTS.md", "docs/**/*.md"]
 extractors = ["sqlalchemy"]
 
 [codebases.layered_app.layers]
@@ -18,6 +19,12 @@ strip_prefixes = ["repository_"]
 strip_suffixes = ["_services", "_service"]
 singularize = true
 
+[codebases.layered_app.doc_kinds]  # first matching glob wins
+"AGENTS.md" = "agents"
+"docs/decisions/**" = "adr"
+"docs/**" = "guide"
+
 [codebases.plainrepo]              # two packages, one under src/; no rules, no extractors
 root = "plainrepo"
 packages = ["src/toolkit", "reporter"]
+docs = ["README.md"]               # no doc_kinds: every Doc gets kind "doc"
