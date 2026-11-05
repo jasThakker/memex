@@ -1,4 +1,4 @@
-"""Turn parsed references into edges between nodes. Phase 2 covers IMPORTS.
+"""Turn parsed references into edges between nodes: IMPORTS and INHERITS.
 
 Import rules:
 - `import a.b` points at module `a.b` if it is in the codebase, else at External `a.b`.
@@ -13,8 +13,20 @@ Import rules:
 - Relative imports resolve against the importing module's package; one that climbs above the
   top-level package is dropped.
 - Names from one module that reach the same target share one edge.
+
+Inheritance rules (INHERITS, position is the base's 0-based index as written):
+- A base is a name or a dotted attribute (`base.Mixin`, `typing.Protocol`); a subscript uses
+  its value (`Generic[T]` gives `Generic`). Keyword arguments such as `metaclass=` are
+  ignored, and any other expression gets no edge.
+- Names are looked up as the module binds them once it has run (a local class defined after
+  an import of the same name wins), then as builtins (External `builtins.X`). `object` is
+  skipped.
+- An in-codebase target must be a class; one outside the codebase becomes External, with the
+  same id an import of it would get.
 """
 
+import ast
+import builtins
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import PurePosixPath
@@ -29,7 +41,7 @@ def link_imports(
     codebase: str, modules: Sequence[ParsedModule]
 ) -> tuple[list[Edge], list[ExternalNode]]:
     """IMPORTS edges for every module, plus the External nodes they point at."""
-    index = _Index(modules)
+    index = SymbolTable(modules)
     edges: dict[tuple[str, str], Edge] = {}
     externals: dict[str, ExternalNode] = {}
     for module in modules:
@@ -58,12 +70,50 @@ def link_imports(
     return list(edges.values()), list(externals.values())
 
 
-class _Index:
-    """Lookups over one codebase's parsed modules, by dotted qualname."""
+def link_inherits(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], list[ExternalNode]]:
+    """INHERITS edges for every class, plus the External nodes they point at."""
+    edges: list[Edge] = []
+    externals: dict[str, ExternalNode] = {}
+    for module in symbols.modules.values():
+        for node in module.nodes:
+            definition = module.definitions.get(node.qualname)
+            if not isinstance(node, ClassNode) or not isinstance(definition, ast.ClassDef):
+                continue
+            for position, base in enumerate(definition.bases):
+                resolved = symbols.resolve_expression(module, base)
+                if resolved is None or resolved == ("builtins.object", True):
+                    continue
+                dotted, is_external = resolved
+                if is_external:
+                    target = external_id(codebase, dotted)
+                    externals.setdefault(
+                        dotted, ExternalNode(id=target, codebase=codebase, name=dotted)
+                    )
+                elif dotted in symbols.classes and dotted != node.qualname:
+                    target = code_id(codebase, dotted)
+                else:
+                    continue
+                edges.append(
+                    Edge(kind="INHERITS", source=node.id, target=target, position=position)
+                )
+    return edges, list(externals.values())
+
+
+class SymbolTable:
+    """Read-only lookups over one codebase's parsed modules, by dotted qualname.
+
+    Shared by the resolver and the framework extractors (DESIGN.md section 6).
+    """
 
     def __init__(self, modules: Sequence[ParsedModule]) -> None:
         self.modules = {module.source.qualname: module for module in modules}
         self.symbols = {node.qualname for module in modules for node in module.nodes}
+        self.classes = {
+            node.qualname
+            for module in modules
+            for node in module.nodes
+            if isinstance(node, ClassNode)
+        }
         self.definition_lines = {
             node.qualname: node.line
             for module in modules
@@ -120,6 +170,61 @@ class _Index:
                     if found is not None:
                         return found
         return None
+
+    def resolve_name(self, module: ParsedModule, name: str) -> tuple[str, bool] | None:
+        """(dotted target, is_external) of a bare name as `module` binds it, or None.
+
+        In-codebase bindings first (definitions and imports, through `find`), then an import
+        from outside the codebase, then a builtin.
+        """
+        found = self.find(module.source.qualname, name, hops=0)
+        if found is not None:
+            return found, False
+        for raw in reversed(module.imports):
+            if not raw.module_level or raw.name == "*":
+                continue
+            if raw.name is None and raw.alias is None:  # import a.b binds a
+                if raw.module is not None and raw.module.split(".")[0] == name:
+                    return self._outside(name)
+            elif (raw.alias or raw.name) == name:
+                base = _absolute(module, raw)
+                if base is None:
+                    return None
+                return self._outside(base if raw.name is None else f"{base}.{raw.name}")
+        if hasattr(builtins, name):
+            return f"builtins.{name}", True
+        return None
+
+    def resolve_expression(self, module: ParsedModule, expr: ast.expr) -> tuple[str, bool] | None:
+        """(dotted target, is_external) of a name, dotted attribute or subscript, or None."""
+        if isinstance(expr, ast.Subscript):
+            expr = expr.value
+        parts: list[str] = []
+        while isinstance(expr, ast.Attribute):
+            parts.insert(0, expr.attr)
+            expr = expr.value
+        if not isinstance(expr, ast.Name):
+            return None
+        resolved = self.resolve_name(module, expr.id)
+        if resolved is None:
+            return None
+        dotted, is_external = resolved
+        if is_external:
+            return ".".join([dotted, *parts]), True
+        for part in parts:
+            found = self.find(dotted, part, hops=0)
+            if found is None:
+                return None
+            dotted = found
+        return dotted, False
+
+    def _outside(self, dotted: str) -> tuple[str, bool] | None:
+        """A dotted name not found by `find`: a walked module, External, or nothing."""
+        if dotted in self.modules:
+            return dotted, False
+        if dotted.split(".")[0] in self.packages:
+            return None  # inside the codebase but not walked, or not a symbol
+        return dotted, True
 
     def _follow(self, parsed: ParsedModule, raw: RawImport, hops: int) -> str | None:
         """Where one binding import inside `parsed` leads, or None."""

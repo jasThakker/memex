@@ -54,5 +54,8 @@ def test_underscore_private_folders_and_files_get_clean_labels(batch: GraphBatch
 
 
 def test_no_references_without_an_extractor(batch: GraphBatch) -> None:
-    # Trivially true until Phase 3 adds the extractor stage; it guards that stage.
-    assert {edge.kind for edge in batch.edges} == {"DEFINES", "IMPORTS"}
+    # Trivially true until the extractor stage exists (Phase 3 slice 3); it guards that stage.
+    kinds = {edge.kind for edge in batch.edges}
+
+    assert "INHERITS" in kinds
+    assert "REFERENCES" not in kinds

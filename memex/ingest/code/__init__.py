@@ -1,4 +1,4 @@
-"""Code ingest: walk, parse, link imports and classify one codebase into a GraphBatch."""
+"""Code ingest: walk, parse, classify and link one codebase into a GraphBatch."""
 
 from collections import Counter
 from collections.abc import Sequence
@@ -9,12 +9,13 @@ from memex.config import Codebase
 from memex.graph.model import CodebaseNode, GraphBatch, IndexStats, ModuleNode, ParseError
 from memex.ingest.code.classify import classify
 from memex.ingest.code.parser import ParsedModule, parse_module
-from memex.ingest.code.resolver import link_imports
+from memex.ingest.code.resolver import SymbolTable, link_imports, link_inherits
 from memex.ingest.code.walker import walk
 
 
 def index_code(codebase: Codebase) -> GraphBatch:
-    """Every module, class and function of a codebase with its DEFINES and IMPORTS edges.
+    """Every module, class and function of a codebase with its DEFINES, IMPORTS and INHERITS
+    edges, and the External nodes those point at (one per id).
 
     A file that fails to parse is recorded in the stats and skipped. Node ids are unique:
     if a definition has the id of a module (say `def utils()` in `pkg/__init__.py` next to
@@ -32,7 +33,9 @@ def index_code(codebase: Codebase) -> GraphBatch:
             parsed.append(result)
 
     modules, dropped = _labeled_without_duplicates(codebase, parsed)
-    imports, externals = link_imports(codebase.name, modules)
+    imports, import_externals = link_imports(codebase.name, modules)
+    inherits, inherit_externals = link_inherits(codebase.name, SymbolTable(modules))
+    externals = {node.id: node for node in (*import_externals, *inherit_externals)}
     code_nodes = [node for module in modules for node in module.nodes]
     defines = [edge for module in modules for edge in module.defines]
     module_nodes = [node for node in code_nodes if isinstance(node, ModuleNode)]
@@ -58,8 +61,8 @@ def index_code(codebase: Codebase) -> GraphBatch:
     )
     return GraphBatch(
         codebase=codebase.name,
-        nodes=(codebase_node, *code_nodes, *externals),
-        edges=(*defines, *imports),
+        nodes=(codebase_node, *code_nodes, *externals.values()),
+        edges=(*defines, *imports, *inherits),
         stats=stats,
     )
 

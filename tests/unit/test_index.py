@@ -79,11 +79,11 @@ def test_every_code_node_carries_its_module_labels() -> None:
     assert mismatched == []
 
 
-def test_batch_holds_defines_and_imports_edges_and_externals() -> None:
+def test_batch_holds_defines_imports_and_inherits_edges_and_externals() -> None:
     kinds = Counter(edge.kind for edge in LAYERED.edges)
     externals = {node.name for node in LAYERED.nodes if isinstance(node, ExternalNode)}
 
-    assert set(kinds) == {"DEFINES", "IMPORTS"}
+    assert set(kinds) == {"DEFINES", "IMPORTS", "INHERITS"}
     assert kinds["DEFINES"] == len(by_qualname(LAYERED)) - 27  # one per class or function
     assert "pydantic.BaseModel" in externals
 
@@ -123,11 +123,13 @@ def test_stats_count_files_and_modules_per_layer_and_domain() -> None:
 
 
 def test_plainrepo_has_no_references_without_an_extractor() -> None:
-    # Trivially true until Phase 3 adds the extractor stage; it guards that stage.
+    # Trivially true until the extractor stage exists (Phase 3 slice 3); it guards that stage.
     batch = index_code(REGISTRY.get("plainrepo"))
+    kinds = {edge.kind for edge in batch.edges}
 
     assert batch.stats.files == 10
-    assert {edge.kind for edge in batch.edges} == {"DEFINES", "IMPORTS"}
+    assert "INHERITS" in kinds
+    assert "REFERENCES" not in kinds
 
 
 def test_a_file_that_fails_to_parse_is_counted_and_the_rest_is_indexed(tmp_path: Path) -> None:

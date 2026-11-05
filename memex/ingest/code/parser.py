@@ -10,12 +10,13 @@ job.
 
 import ast
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from memex.graph.model import ClassNode, Edge, FunctionNode, ModuleNode, ParseError, code_id
 from memex.ingest.code.walker import SourceFile
 
 CodeNode = ModuleNode | ClassNode | FunctionNode
+Definition = ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class ParsedModule:
     nodes: tuple[CodeNode, ...]  # the module first, then definitions in source order
     defines: tuple[Edge, ...]
     imports: tuple[RawImport, ...]  # in source order
+    definitions: dict[str, Definition] = field(default_factory=dict)  # qualname -> its AST
 
 
 def parse_module(codebase: str, source: SourceFile, data: bytes) -> ParsedModule | ParseError:
@@ -74,6 +76,7 @@ def parse_module(codebase: str, source: SourceFile, data: bytes) -> ParsedModule
         nodes=tuple(collector.nodes.values()),
         defines=tuple(collector.defines),
         imports=_imports(tree),
+        definitions=collector.definitions,
     )
 
 
@@ -86,6 +89,7 @@ class _Collector:
         self.nodes: dict[str, CodeNode] = {module.qualname: module}
         self.defines: list[Edge] = []
         self.overload_stubs: set[str] = set()
+        self.definitions: dict[str, Definition] = {}
 
     def visit_body(self, body: list[ast.stmt], parent: ModuleNode | ClassNode) -> None:
         for statement in body:
@@ -113,6 +117,7 @@ class _Collector:
             docstring=_first_docstring_line(node),
         )
         self._add(cls, parent)
+        self.definitions[qualname] = node
         self.visit_body(node.body, cls)
 
     def _add_function(
@@ -138,6 +143,7 @@ class _Collector:
             self.nodes[qualname] = function
         else:
             self._add(function, parent)
+        self.definitions[qualname] = node
         if _is_overload(node):
             self.overload_stubs.add(qualname)
         else:
