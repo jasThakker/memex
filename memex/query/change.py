@@ -13,6 +13,11 @@ which documented rules apply. No LLM: the calling agent makes the final judgment
   each section, the sentences naming a mentioned symbol, or if none does (the mention is in
   the heading) those with a stance; at most PER_SECTION, those with a stance first. Each
   guideline quotes one sentence and cites its own lines.
+- Then guidelines from a full-text search on the description: the best SEARCH_SECTIONS
+  sections, and in each the sentences sharing a content word with the description (four
+  letters or more, not a common English word), those with a stance first, then those
+  sharing more words; at most PER_SECTION. A sentence found both ways is listed once, as a
+  mention.
 - At most MAX_GUIDELINES guidelines.
 - `truncated` is set when names, candidates or guidelines were cut.
 """
@@ -24,7 +29,7 @@ from typing import Any
 from neo4j import Driver, RoutingControl
 
 from memex.graph.model import code_id
-from memex.query.docs import MAX_QUERY_CHARS, snippet
+from memex.query.docs import MAX_QUERY_CHARS, search_sections, snippet
 from memex.query.impact import start_set, walk
 from memex.query.models import (
     AmbiguousName,
@@ -44,6 +49,59 @@ MAX_CANDIDATES = 5
 AFFECTED_DEPTH = 3
 MAX_GUIDELINES = 6
 PER_SECTION = 2
+SEARCH_SECTIONS = 5
+
+_WORD = re.compile(r"\w+")
+# Common words a description and a rule share without being about the same thing.
+_STOPWORDS = frozenset(
+    [
+        "about",
+        "after",
+        "also",
+        "always",
+        "avoid",
+        "been",
+        "before",
+        "could",
+        "does",
+        "each",
+        "from",
+        "have",
+        "into",
+        "just",
+        "like",
+        "more",
+        "must",
+        "need",
+        "never",
+        "only",
+        "other",
+        "prefer",
+        "should",
+        "some",
+        "such",
+        "than",
+        "that",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "want",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "will",
+        "with",
+        "would",
+        "your",
+    ]
+)
 
 _MENTIONING = (
     "MATCH (doc:Doc {codebase: $codebase})-[:MENTIONS]->(c) WHERE c.id IN $ids "
@@ -82,7 +140,10 @@ def check_change(driver: Driver, codebase: str, proposal: ChangeProposal) -> Cha
     resolved_ids = {code_id(codebase, qualname) for qualname in resolved}
     start_ids = [i for node_id in resolved_ids for i in start_set(driver, node_id)]
     distance, found = walk(driver, list(dict.fromkeys(start_ids)), AFFECTED_DEPTH)
-    guidelines = _mention_guidelines(driver, codebase, resolved_ids, distance)
+    guidelines = _merge(
+        _mention_guidelines(driver, codebase, resolved_ids, distance)
+        + _search_guidelines(driver, codebase, description)
+    )
 
     return ChangeCheck(
         codebase=codebase,
@@ -125,6 +186,49 @@ def _mention_guidelines(
         for sentence, name in _pick(_body_sentences(row["props"]), names):
             guidelines.append(_guideline(row["props"], sentence, name, "mention"))
     return guidelines
+
+
+def _search_guidelines(driver: Driver, codebase: str, description: str) -> list[Guideline]:
+    """Cited sentences from the sections a full-text search on the description finds."""
+    wanted = _content_words(description)
+    guidelines: list[Guideline] = []
+    for row in search_sections(driver, codebase, description, SEARCH_SECTIONS):
+        shared = [
+            (sentence, wanted & _content_words(sentence.text))
+            for sentence in _body_sentences(row["props"])
+        ]
+        best = sorted(
+            ((sentence, words) for sentence, words in shared if words),
+            key=lambda pair: (
+                stance(pair[0].text) == "related",
+                -len(pair[1]),
+                pair[0].start_line,
+            ),
+        )[:PER_SECTION]
+        for sentence, words in sorted(best, key=lambda pair: pair[0].start_line):
+            term = " ".join(sorted(words))
+            guidelines.append(_guideline(row["props"], sentence, term, "search"))
+    return guidelines
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        word
+        for word in (match.lower() for match in _WORD.findall(text))
+        if len(word) >= 4 and word not in _STOPWORDS
+    }
+
+
+def _merge(guidelines: list[Guideline]) -> list[Guideline]:
+    """Each cited sentence once, the first occurrence kept (mentions come first)."""
+    seen: set[tuple[str, int]] = set()
+    merged: list[Guideline] = []
+    for guideline in guidelines:
+        key = (guideline.citation.path, guideline.citation.start_line)
+        if key not in seen:
+            seen.add(key)
+            merged.append(guideline)
+    return merged
 
 
 def _names(label: str, qualname: str, path: str) -> list[str]:

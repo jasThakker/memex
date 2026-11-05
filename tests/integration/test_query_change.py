@@ -15,6 +15,7 @@ from neo4j import Driver
 from memex.config import load_config
 from memex.graph.model import DocNode, Edge, GraphBatch, code_id, doc_id
 from memex.graph.store import ensure_schema, replace_codebase
+from memex.ingest import index_codebase
 from memex.ingest.code import index_code
 from memex.query import change
 from memex.query.change import check_change
@@ -23,7 +24,8 @@ from memex.query.models import ChangeCheck, ChangeProposal, Citation, Guideline,
 pytestmark = pytest.mark.neo4j
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-LAYERED = index_code(load_config(FIXTURES / "memex.toml").get("layered_app"))
+REGISTRY = load_config(FIXTURES / "memex.toml")
+LAYERED = index_code(REGISTRY.get("layered_app"))
 
 BASE = "app._base.service.BaseService"
 USER_REPOS = "app.repos.repository_users"
@@ -201,6 +203,17 @@ DOCS = [
         ["Never rename `Order` columns."],
         ["app.db.models.orders.Order"],  # unrelated to BaseService
     ),
+    (
+        "docs/locales.md",
+        "Translations",
+        1,
+        [
+            "Only edit the English locale files.",
+            "Other locale files must never be modified by hand.",
+            "Translators work in a separate tool.",  # shares no word with the proposal
+        ],
+        [],  # found by search only
+    ),
 ]
 
 
@@ -291,7 +304,7 @@ BASE_GUIDELINES = [
 def test_docs_mentioning_the_change_give_cited_sentences_with_a_stance(
     documented: Driver,
 ) -> None:
-    result = check(documented, "Rename it.", ["BaseService"])
+    result = check(documented, "Tidy it up.", ["BaseService"])
 
     assert result.guidelines == BASE_GUIDELINES
     assert result.truncated is False
@@ -299,13 +312,94 @@ def test_docs_mentioning_the_change_give_cited_sentences_with_a_stance(
 
 def test_guidelines_are_capped(documented: Driver, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(change, "MAX_GUIDELINES", 3)
-    result = check(documented, "Rename it.", ["BaseService"])
+    result = check(documented, "Tidy it up.", ["BaseService"])
 
     assert result.guidelines == BASE_GUIDELINES[:3]
     assert result.truncated is True
 
 
 def test_nothing_resolved_gives_no_mention_guidelines(documented: Driver) -> None:
-    result = check(documented, "Rename it.", ["NoSuchThing"])
+    result = check(documented, "Tidy it up.", ["NoSuchThing"])
 
     assert [g for g in result.guidelines if g.matched_on == "mention"] == []
+
+
+def searched(stance: str, quote: str, path: str, heading_path: str, line: int) -> Guideline:
+    return mentioned(stance, quote, path, heading_path, (line, line)).model_copy(
+        update={"matched_on": "search"}
+    )
+
+
+def test_a_full_text_search_on_the_description_finds_rules_no_symbol_names(
+    documented: Driver,
+) -> None:
+    result = check(documented, "Add a German translation by editing the locale files.")
+
+    assert result.resolved_symbols == []
+    # sentences sharing a word of the proposal, a stance first; then in line order
+    assert result.guidelines == [
+        searched(
+            "related", "Only edit the English locale files.", "docs/locales.md", "Translations", 2
+        ),
+        searched(
+            "forbids",
+            "Other locale files must never be modified by hand.",
+            "docs/locales.md",
+            "Translations",
+            3,
+        ),
+    ]
+
+
+def test_a_sentence_found_both_ways_is_listed_once_as_a_mention(
+    documented: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(change, "MAX_GUIDELINES", 50)
+    result = check(documented, "Construct `BaseService` directly in scripts.")
+
+    cited = [(g.citation.path, g.citation.start_line) for g in result.guidelines]
+    assert len(cited) == len(set(cited))
+    construct = [g for g in result.guidelines if g.quote.startswith("Never construct")]
+    assert [g.matched_on for g in construct] == ["mention"]
+    # every mention before every search hit
+    kinds = [g.matched_on for g in result.guidelines]
+    assert kinds == sorted(kinds)
+
+
+def test_on_the_real_fixture_docs_a_rule_against_an_ambiguous_name_is_found_by_search(
+    driver: Driver,
+) -> None:
+    ensure_schema(driver)
+    replace_codebase(driver, index_codebase(REGISTRY.get("layered_app")))
+
+    result = check(driver, "Call `get_one` on a repository from a route.")
+
+    assert [a.name for a in result.ambiguous] == ["get_one"]
+    assert (
+        searched(
+            "forbids",
+            "Never call `get_one` on a repository from a route.",
+            "AGENTS.md",
+            "Agent Guide > Layers",
+            9,
+        )
+        in result.guidelines
+    )
+
+
+def test_on_the_real_fixture_docs_a_mention_cites_its_line(driver: Driver) -> None:
+    ensure_schema(driver)
+    replace_codebase(driver, index_codebase(REGISTRY.get("layered_app")))
+
+    result = check(driver, "Tidy it up.", ["BaseService"])
+
+    assert (
+        mentioned(
+            "related",
+            "Services inherit from `BaseService` and get repositories from `AllRepositories`.",
+            "AGENTS.md",
+            "Agent Guide > Layers",
+            (8, 8),
+        )
+        in result.guidelines
+    )
