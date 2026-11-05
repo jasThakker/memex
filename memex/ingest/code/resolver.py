@@ -410,9 +410,43 @@ class SymbolTable:
             for node in module.nodes
             if isinstance(node, ClassNode | FunctionNode)
         }
+        self.classes_by_name: dict[str, list[str]] = {}
+        for qualname in sorted(self.classes):
+            self.classes_by_name.setdefault(qualname.rsplit(".", 1)[-1], []).append(qualname)
         self.packages = {qualname.split(".")[0] for qualname in self.modules}
+        self.nodes = {node.qualname: node for module in modules for node in module.nodes}
         self._module_of = {node.qualname: module for module in modules for node in module.nodes}
         self._bases: dict[str, list[str]] = {}
+        self._class_attributes: dict[str, dict[str, str]] = {}
+
+    def module_of(self, qualname: str) -> ParsedModule:
+        """The parsed module a module, class or function node comes from."""
+        return self._module_of[qualname]
+
+    def class_attributes(self, cls: str) -> dict[str, str]:
+        """String literals assigned directly in a class body: `__tablename__ = "users"`."""
+        if cls not in self._class_attributes:
+            definition = self._module_of[cls].definitions.get(cls)
+            found: dict[str, str] = {}
+            body = definition.body if isinstance(definition, ast.ClassDef) else []
+            for statement in body:
+                match statement:
+                    case ast.Assign(
+                        targets=[ast.Name(id=name)], value=ast.Constant(value=str() as value)
+                    ):
+                        found.setdefault(name, value)
+                    case ast.AnnAssign(
+                        target=ast.Name(id=name), value=ast.Constant(value=str() as value)
+                    ):
+                        found.setdefault(name, value)
+            self._class_attributes[cls] = found
+        return self._class_attributes[cls]
+
+    def by_class_attribute(self, attribute: str, value: str) -> list[str]:
+        """Classes whose body assigns the string `value` to `attribute`, sorted."""
+        return sorted(
+            cls for cls in self.classes if self.class_attributes(cls).get(attribute) == value
+        )
 
     def bases(self, cls: str) -> list[str]:
         """In-codebase base classes of a class, in the order written."""

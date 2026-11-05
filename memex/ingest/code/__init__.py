@@ -5,9 +5,19 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from memex.config import Codebase
-from memex.graph.model import CodebaseNode, GraphBatch, IndexStats, ModuleNode, ParseError
+from memex.config import Codebase, ConfigError
+from memex.graph.model import (
+    ClassNode,
+    CodebaseNode,
+    Edge,
+    GraphBatch,
+    IndexStats,
+    ModuleNode,
+    ParseError,
+)
 from memex.ingest.code.classify import classify
+from memex.ingest.code.extractors import EXTRACTORS, Extractor
+from memex.ingest.code.extractors.base import CLASS_PROPERTIES
 from memex.ingest.code.parser import ParsedModule, parse_module
 from memex.ingest.code.resolver import SymbolTable, link_calls, link_imports, link_inherits
 from memex.ingest.code.walker import walk
@@ -16,12 +26,15 @@ from memex.ingest.code.walker import walk
 def index_code(codebase: Codebase) -> GraphBatch:
     """Every module, class and function of a codebase with its DEFINES, IMPORTS, INHERITS and
     CALLS edges, the External nodes those point at (one per id) and the unresolved call count.
+    The extractors listed for the codebase add their edges and class properties last; an
+    unknown extractor name is a ConfigError, raised before anything is read.
 
     A file that fails to parse is recorded in the stats and skipped. Node ids are unique:
     if a definition has the id of a module (say `def utils()` in `pkg/__init__.py` next to
     `pkg/utils.py`), the module wins; the definition and everything inside it are dropped
     and recorded before imports are linked, so no edge points at a dropped node.
     """
+    extractors = _extractors(codebase)
     sources = walk(codebase)
     parsed: list[ParsedModule] = []
     errors: list[ParseError] = []
@@ -37,8 +50,15 @@ def index_code(codebase: Codebase) -> GraphBatch:
     symbols = SymbolTable(modules)
     inherits, inherit_externals = link_inherits(codebase.name, symbols)
     calls, unresolved_calls = link_calls(codebase.name, symbols)
+    extracted, properties = _run_extractors(extractors, modules, symbols)
     externals = {node.id: node for node in (*import_externals, *inherit_externals)}
-    code_nodes = [node for module in modules for node in module.nodes]
+    code_nodes = [
+        replace(node, **properties[node.id])
+        if isinstance(node, ClassNode) and node.id in properties
+        else node
+        for module in modules
+        for node in module.nodes
+    ]
     defines = [edge for module in modules for edge in module.defines]
     module_nodes = [node for node in code_nodes if isinstance(node, ModuleNode)]
 
@@ -65,9 +85,35 @@ def index_code(codebase: Codebase) -> GraphBatch:
     return GraphBatch(
         codebase=codebase.name,
         nodes=(codebase_node, *code_nodes, *externals.values()),
-        edges=(*defines, *imports, *inherits, *calls),
+        edges=(*defines, *imports, *inherits, *calls, *extracted),
         stats=stats,
     )
+
+
+def _extractors(codebase: Codebase) -> list[Extractor]:
+    unknown = [name for name in codebase.extractors if name not in EXTRACTORS]
+    if unknown:
+        known = ", ".join(sorted(EXTRACTORS))
+        raise ConfigError(
+            f"codebase {codebase.name!r}: unknown extractor {unknown[0]!r}; known: {known}"
+        )
+    return [EXTRACTORS[name]() for name in codebase.extractors]
+
+
+def _run_extractors(
+    extractors: Sequence[Extractor], modules: Sequence[ParsedModule], symbols: SymbolTable
+) -> tuple[list[Edge], dict[str, dict[str, str]]]:
+    """Edges and class properties from every extractor, in the order listed."""
+    edges: list[Edge] = []
+    properties: dict[str, dict[str, str]] = {}
+    for extractor in extractors:
+        edges += extractor.extract(modules, symbols)
+        for class_id, values in extractor.class_properties(modules, symbols).items():
+            undeclared = set(values) - CLASS_PROPERTIES
+            if undeclared:
+                raise ValueError(f"{extractor.name} sets undeclared properties {undeclared}")
+            properties.setdefault(class_id, {}).update(values)
+    return edges, properties
 
 
 def _labeled_without_duplicates(

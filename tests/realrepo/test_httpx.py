@@ -54,7 +54,7 @@ def test_underscore_private_folders_and_files_get_clean_labels(batch: GraphBatch
 
 
 def test_no_references_without_an_extractor(batch: GraphBatch) -> None:
-    # Trivially true until the extractor stage exists (Phase 3 slice 3); it guards that stage.
+    # httpx lists no extractors, so the extractor stage must add nothing.
     kinds = {edge.kind for edge in batch.edges}
 
     assert "INHERITS" in kinds
