@@ -1,0 +1,65 @@
+{
+  "name": "full",
+  "root": "/private/var/folders/0s/pc0t71qn6j53ync66dzflm440000gn/T/eval-full/mealie",
+  "codebase": "mealie",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "runs_per_condition": 1,
+  "max_budget_usd": 2.0,
+  "timeout_s": 900,
+  "codebase_commit": "9552df62118224a377d9c9b0a62706a62220ab86",
+  "invocations": [
+    {
+      "memex_commit": "7589ac190e80a1c32737b7fad377ddf748149ce5",
+      "claude_version": "2.1.318 (Claude Code)",
+      "argv": [
+        "--name",
+        "full",
+        "--baseline"
+      ],
+      "started": "2026-11-05T22:51:59Z",
+      "env_removed": [
+        "CLAUDECODE",
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_EXECPATH",
+        "CLAUDE_CODE_HOST_SHORT_TEMP_DIRS",
+        "CLAUDE_CODE_MESSAGING_SOCKET",
+        "CLAUDE_CODE_MESSAGING_TOKEN",
+        "CLAUDE_CODE_SESSION_ATTENDED",
+        "CLAUDE_CODE_SESSION_ID",
+        "CLAUDE_EFFORT",
+        "CLAUDE_JOB_DIR",
+        "CLAUDE_PID"
+      ],
+      "jobs": [
+        "baseline-A-1.jsonl",
+        "baseline-B-1.jsonl",
+        "q01-A-1.jsonl",
+        "q01-B-1.jsonl",
+        "q02-A-1.jsonl",
+        "q02-B-1.jsonl",
+        "q03-A-1.jsonl",
+        "q03-B-1.jsonl",
+        "q04-A-1.jsonl",
+        "q04-B-1.jsonl",
+        "q05-A-1.jsonl",
+        "q05-B-1.jsonl",
+        "q06-A-1.jsonl",
+        "q06-B-1.jsonl",
+        "q07-A-1.jsonl",
+        "q07-B-1.jsonl",
+        "q08-A-1.jsonl",
+        "q08-B-1.jsonl",
+        "q09-A-1.jsonl",
+        "q09-B-1.jsonl",
+        "q10-A-1.jsonl",
+        "q10-B-1.jsonl",
+        "q11-A-1.jsonl",
+        "q11-B-1.jsonl",
+        "q12-A-1.jsonl",
+        "q12-B-1.jsonl"
+      ]
+    }
+  ]
+}

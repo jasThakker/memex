@@ -394,8 +394,26 @@ Stated openly:
 - Conditions, same model, prompt and working directory:
   - **A:** `Read`, `Grep`, `Glob` on `vendor/mealie`.
   - **B:** Memex MCP tools plus `Read`.
-- `eval/run.py` calls `claude -p --output-format json` per question per condition with restricted tools, and records token usage (input, output and cache separately). Condition B pays for its tool definitions, and the report says so.
-- `runs_per_condition` lives in `eval/config.toml`. It defaults to 1; with N=1 there is no variance estimate, and the results say so.
+- `eval/run.py` calls `claude -p --output-format stream-json --verbose` once per question, condition and run, and saves each transcript verbatim as `eval/results/<run>/<qid>-<condition>-<n>.jsonl`. The final `result` event is the object `--output-format json` returns (usage, cost, turns, duration). The stream also keeps the `init` event (the tools and MCP servers actually offered) and every tool call.
+- Isolation, the same for both conditions:
+  - The working directory is an empty `eval-<run>/work` under the system temp dir, with no CLAUDE.md or AGENTS.md in it or above it (checked before every invocation).
+  - The codebase is reached through a symlink, `eval-<run>/<codebase>`, added with `--add-dir`. It sits beside the workdir, so the codebase's own CLAUDE.md is never loaded, and no path in the prompt names Memex.
+  - The prompt goes on stdin and never names Memex.
+  - Pinned `--model` and `--effort`. `--strict-mcp-config`, `--setting-sources project,local` (both empty), `--permission-mode dontAsk` and `--no-session-persistence`.
+  - The calling session's `CLAUDE*`, `MCP_*` and model-override environment variables are removed, and their names recorded.
+  - Tools: A gets `--tools Read,Grep,Glob`; B gets `--tools Read` and an inline `--mcp-config` with only the Memex server.
+- A run is **invalid** when its `init` event did not offer exactly its condition's tools: for A, Read, Grep and Glob and no MCP server; for B, Read and the `mcp__memex__` tools, with that server connected and no other. Invalid runs are left out of the scores; their tokens still count.
+- Answer format: the agent ends with one fenced `json` block, `{"symbols": [...], "docs": [...]}`, with full dotted qualnames and `path#Heading` doc refs. `eval/grade.py` reads the last such block; a missing one scores 0.
+- Normalization before comparing:
+  - case, backticks and a trailing `()` are ignored;
+  - for doc refs, the codebase root and `./` are dropped from the path, Markdown links are reduced to their text, leading `#` marks are dropped, and a ` > ` heading path keeps its last heading.
+- Scores are precision, recall and F1 over the combined set of expected symbols and docs, averaged per condition and per category. Each question lists its missed and extra items.
+- Token usage keeps input, output, cache creation and cache read separate. Condition B pays for its tool definitions, and the report says so:
+  - One baseline call per condition with a trivial prompt measures the difference in prompt size.
+  - That difference is the Memex tool definitions and server instructions minus the Grep and Glob definitions.
+  - It is paid on every request, mostly as cache reads.
+- `model`, `effort`, `runs_per_condition`, a per-call budget and timeout live in `eval/config.toml`. `runs_per_condition` defaults to 1; with N=1 there is no variance estimate, and the results say so.
+- A finished transcript is skipped when the run is resumed; an unfinished one runs again. Each invocation is appended to the run's `meta.json`.
 
 ## 15. Build plan
 

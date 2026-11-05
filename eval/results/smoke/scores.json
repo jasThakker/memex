@@ -1,0 +1,147 @@
+{
+  "summary": {
+    "B": {
+      "runs": 1,
+      "invalid": 0,
+      "answered": 1,
+      "errors": 0,
+      "precision": 0.4375,
+      "recall": 0.6363636363636364,
+      "f1": 0.5185185185185185,
+      "by_category": {
+        "check_change": {
+          "precision": 0.4375,
+          "recall": 0.6363636363636364,
+          "f1": 0.5185185185185185
+        }
+      },
+      "usage": {
+        "input_tokens": 22,
+        "output_tokens": 4670,
+        "cache_creation_tokens": 30928,
+        "cache_read_tokens": 200859,
+        "total_input": 231809,
+        "cost_usd": 0.190542,
+        "turns": 24,
+        "duration_ms": 39439
+      },
+      "estimated_usage": 0
+    }
+  },
+  "baselines": {
+    "A": {
+      "error": false,
+      "problem": null,
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcp_servers": [],
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 4,
+        "cache_creation_tokens": 2299,
+        "cache_read_tokens": 3223,
+        "total_input": 5524,
+        "cost_usd": 0.009562,
+        "turns": 1,
+        "duration_ms": 1099
+      }
+    },
+    "B": {
+      "error": false,
+      "problem": null,
+      "tools": [
+        "Read",
+        "mcp__memex__callees",
+        "mcp__memex__callers",
+        "mcp__memex__check_change",
+        "mcp__memex__find_symbol",
+        "mcp__memex__impact_of",
+        "mcp__memex__list_codebases",
+        "mcp__memex__search_docs"
+      ],
+      "mcp_servers": [
+        [
+          "memex",
+          "connected"
+        ]
+      ],
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 4,
+        "cache_creation_tokens": 5987,
+        "cache_read_tokens": 0,
+        "total_input": 5989,
+        "cost_usd": 0.023992,
+        "turns": 1,
+        "duration_ms": 3418
+      }
+    }
+  },
+  "runs": [
+    {
+      "id": "q11",
+      "category": "check_change",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.45454545454545453,
+        "recall": 0.8333333333333334,
+        "f1": 0.5882352941176471
+      },
+      "docs": {
+        "precision": 0.4,
+        "recall": 0.4,
+        "f1": 0.4000000000000001
+      },
+      "combined": {
+        "precision": 0.4375,
+        "recall": 0.6363636363636364,
+        "f1": 0.5185185185185185
+      },
+      "missed": [
+        "AGENTS.md#What to Review",
+        "docs/docs/contributors/developers-guide/code-contributions.md#We Use GitHub Flow, So All Code Changes Happen Through Pull Requests",
+        "docs/docs/contributors/developers-guide/database-changes.md#Overview",
+        "mealie.schema.group.ai_providers.AIProviderCreate.validate_as_none"
+      ],
+      "extra": [
+        "AGENTS.md#Common Gotchas",
+        "AGENTS.md#Pull Request Best Practices",
+        "docs/docs/documentation/getting-started/installation/ai-providers.md#Configuration",
+        "mealie.repos.repository_ai_provider.GroupRepositoryAIProvider",
+        "mealie.routes.admin.admin_management_ai_providers.AdminGroupAIProviderController",
+        "mealie.schema.group.ai_providers.AIProviderOut",
+        "mealie.schema.group.ai_providers.AIProviderSave",
+        "mealie.schema.group.ai_providers.AIProviderUpdate",
+        "mealie.services.openai.openai.OpenAIService.test_connection"
+      ],
+      "usage": {
+        "input_tokens": 22,
+        "output_tokens": 4670,
+        "cache_creation_tokens": 30928,
+        "cache_read_tokens": 200859,
+        "total_input": 231809,
+        "cost_usd": 0.190542,
+        "turns": 24,
+        "duration_ms": 39439
+      },
+      "tool_calls": {
+        "Read": 9,
+        "mcp__memex__callers": 1,
+        "mcp__memex__check_change": 1,
+        "mcp__memex__find_symbol": 7,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 3
+      }
+    }
+  ]
+}
