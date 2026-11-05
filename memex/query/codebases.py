@@ -2,7 +2,7 @@
 
 from neo4j import Driver, RoutingControl
 
-from memex.query.models import CodebaseStats
+from memex.query.models import CodebaseInfo, CodebaseList, CodebaseStats
 
 
 def codebase_stats(driver: Driver, codebase: str) -> CodebaseStats | None:
@@ -57,3 +57,17 @@ def codebase_stats(driver: Driver, codebase: str) -> CodebaseStats | None:
         layers={row["key"]: row["n"] for row in layers},
         domains={row["key"]: row["n"] for row in domains},
     )
+
+
+def list_codebases(driver: Driver) -> CodebaseList:
+    """Every indexed codebase, by name, with node and edge counts (no layer or domain counts)."""
+    rows, _, _ = driver.execute_query(
+        "MATCH (c:Codebase) RETURN c.name AS name ORDER BY name",
+        routing_=RoutingControl.READ,
+    )
+    infos = []
+    for row in rows:
+        stats = codebase_stats(driver, row["name"])
+        if stats is not None:
+            infos.append(CodebaseInfo(**stats.model_dump(exclude={"layers", "domains"})))
+    return CodebaseList(codebases=infos)
