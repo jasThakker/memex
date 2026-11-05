@@ -242,9 +242,11 @@ Known weak spot: calls through attributes whose type is only known at runtime, s
 
 Built with FastMCP. All tools are read-only and return Pydantic models, defined in `memex/query/models.py` and frozen by ADR-001. Models are immutable and reject unknown fields. List results carry `truncated: bool`. Results contain locations, signatures and first docstring lines, never source bodies; code is referred to by qualname.
 
-**Scope rule:** every tool except `list_codebases` takes `codebase: str` as a required argument, validated against the registry. An unknown codebase returns an error listing the registered names. Memex never infers scope.
+**Scope rule:** every tool except `list_codebases` takes `codebase: str` as a required argument, which must be registered in `memex.toml` and indexed. An unknown codebase returns an error listing the registered names; a registered one that is not indexed returns an error naming `memex index`. `list_codebases` lists only codebases that are both. Memex never infers scope.
 
-**Symbol rule:** `symbol` accepts a full qualname or a short name. If a short name matches more than one symbol, the tool returns `symbol=None` and the candidates instead of guessing; if nothing matches, both are empty.
+**Symbol rule:** `symbol` accepts a full qualname or its last dotted segments (`get_one`, `Client.get`); segments match whole, so `Repository` does not match `UserRepository`. An exact qualname wins. If several symbols match, the tool returns `symbol=None` and the candidates (ordered by qualname, at most `limit`, with `truncated`) instead of guessing; if nothing matches, both are empty.
+
+**Arguments and size:** `limit` is 1 to 200 and `depth`/`max_depth` 1 to 5; anything else, or an empty name or query, is a tool error with the reason. Defaults are set so the JSON an agent receives stays under 4 KB per call, checked on the fixtures and on Mealie (the largest measured, `impact_of` on a central class, is about 3.7 KB at its default of 8).
 
 ```python
 list_codebases() -> CodebaseList
@@ -253,18 +255,28 @@ list_codebases() -> CodebaseList
 
 find_symbol(codebase: str, name: str,
             kind: Literal["module", "class", "function", "any"] = "any",
-            limit: int = 20) -> SymbolSearch
+            limit: int = 10) -> SymbolSearch
+    # best first: exact qualname, qualname ending with `name`, then last
+    # segment containing `name` ignoring case; ties by qualname
 
-callers(codebase: str, symbol: str, depth: int = 1, limit: int = 50) -> CallGraph
-callees(codebase: str, symbol: str, depth: int = 1, limit: int = 50) -> CallGraph
+callers(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGraph
+callees(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGraph
+    # breadth first; each function once, at its shortest distance, with the
+    # via, line and confidence of the edge it was reached by; a recursive
+    # function is its own caller and callee. A class stands for its own
+    # __init__; a class that only inherits __init__, and a module, have no calls
 
-impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 100) -> Impact
-    # reverse traversal over CALLS, INHERITS, REFERENCES and IMPORTS;
-    # dependents grouped by layer, each with distance and edge path;
-    # plus docs that MENTION any dependent
+impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact
+    # reverse traversal over CALLS, INHERITS, REFERENCES and IMPORTS from the
+    # symbol and everything it DEFINES; modules are leaves (their importers are
+    # not followed); the closest `limit` dependents grouped by layer, each with
+    # distance and edge path; `total` counts all; up to 5 docs that MENTION the
+    # symbol or a dependent, those on the symbol first
 
-search_docs(codebase: str, query: str, limit: int = 10) -> DocSearch
-    # full-text hits: path, heading_path, line range, snippet, mentioned symbols
+search_docs(codebase: str, query: str, limit: int = 5) -> DocSearch
+    # full-text hits on heading_path and text, by score: path, heading_path,
+    # kind, line range, a snippet of at most 200 characters, mentioned symbols;
+    # the query is plain text (Lucene syntax is escaped)
 
 check_change(codebase: str, proposal: ChangeProposal) -> ChangeCheck
 
@@ -295,6 +307,7 @@ memex/
   graph/model.py               # Node, Edge, GraphBatch (frozen after Phase 3)
   graph/store.py               # Neo4j writes, constraints, indexes
   query/models.py              # Pydantic result models: the tool contract
+  query/scope.py               # the scope rule: registered and indexed
   query/codebases.py symbols.py calls.py impact.py docs.py change.py
   mcp/server.py                # FastMCP tool registration only
   cli.py                       # memex index <codebase> | memex serve | memex stats <codebase>
@@ -305,8 +318,9 @@ eval/questions.yaml config.toml run.py grade.py results/
 tests/fixtures/layered_app/    # generic layered web app: routes, services, repos, ORM models, schemas
 tests/fixtures/plainrepo/      # two packages, no rules, no extractors
 tests/fixtures/docs/
-tests/unit/ tests/integration/ tests/mcp/
-docker-compose.yml memex.toml pyproject.toml
+tests/unit/ tests/integration/ tests/mcp/ tests/realrepo/
+tests/conftest.py              # the session-scoped Neo4j testcontainer
+docker-compose.yml memex.toml pyproject.toml .mcp.json
 DESIGN.md CLAUDE.md DEVLOG.md README.md
 ```
 
@@ -320,10 +334,11 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 - **Guardrail test** (default run): scans every file in the `memex/` package and fails if the name of any external codebase in `memex.toml` (one with a `source`, so `mealie` and `httpx` but not `memex`) appears in it, case-insensitive, including comments and docstrings.
 - **Unit tests** (no DB, default run, about 2 seconds; the fetch-script tests use real git and take most of it): parser, resolver, extractors, classifier, chunker, mention linker, store rows, CLI.
 - **Integration tests** (`-m neo4j`): store round-trip (Doc nodes and MENTIONS included, plus the `doc_text` full-text index) and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
-- **MCP contract tests** (`-m neo4j`): the FastMCP in-memory client calls each tool and checks the schema, codebase validation, ambiguous-name handling and a size budget (JSON under 4 KB at default limits).
+- **MCP contract tests** (`-m neo4j`): the FastMCP in-memory client calls each tool and checks the tool list, read-only annotations, output schemas against the contract models, default limits, that each tool returns exactly what its query function returns, codebase validation, argument errors, ambiguous-name handling, that nothing writes, and a size budget (the JSON text sent to the agent under 4 KB at default limits).
 - **Real-repo smoke tests** (`-m realrepo`, opt-in, need `vendor/` fetched). One test file per benchmark repo; the assertions are about that repo, the code under test is not.
   - Mealie (rules + extractor): zero parse errors; `RecipeModel` present with layer `db_models`, domain `recipe` and incoming REFERENCES; `routes/households/*` classified as layer `routes`, domain `household`; the AGENTS.md rule against editing generated types is a Doc of kind `agents` that MENTIONS resolved symbols; every doc cited in `eval/questions.yaml` is a Doc id.
   - httpx (defaults only): zero parse errors; `Client` and `AsyncClient` found by `find_symbol`; `Client.get` has `Client.request` among its callees; `_transports/asgi.py` gets layer `transports`, domain `asgi`; README and `docs/*.md` indexed with kind `doc`, and `` ## `Client` `` MENTIONS its class; no REFERENCES edges.
+  - Tools on the real repos (`-m "neo4j and realrepo"`, need Docker too): each repo is indexed into the testcontainer and every tool is called through the MCP client. Mealie: `impact_of RecipeModel` finds its REFERENCES dependents in `db_models` and dependents in `repos`; `search_docs` finds the AGENTS.md generated-types rule first; `callers get_one` returns candidates, not a guess; every call stays within the size budget. httpx: `find_symbol` finds `Client` and `AsyncClient` first; `Client.get` is an `exact` caller of `Client.request`; docs are searchable with kind `doc`; every call stays within the size budget.
 - **Evaluation** runs outside pytest (section 14).
 
 ## 13. v1 limits
@@ -337,6 +352,8 @@ Stated openly:
 - An outside name re-exported through a star import of an outside module is not followed.
 - `sqlalchemy`: a `ForeignKey` inside a module-level `Table(...)` (an association table) has no class to start from and gives no edge.
 - Full re-index only; incremental indexing comes later.
+- `callers` of a class that only inherits `__init__` is empty: constructor calls are stored on the base's `__init__`, so they cannot be told apart from other subclasses' constructions.
+- Symbol lookup filters on qualname suffixes without using an index; fine at the benchmark sizes (under 400 ms per tool call on Mealie, MCP round trip included).
 - Doc mentions are found lexically; a bare word outside backticks never matches. A name inside a call written in backticks (`Depends(get_session)`) is not linked, and bare method names are not linked (section 7).
 - Backtick spans are found outside fences only: a span inside an HTML comment or indented code still links, and a fence opened inside an HTML comment hides the spans after it. A code span that wraps across lines is not linked.
 - The chunker reads only the block rules that decide headings:

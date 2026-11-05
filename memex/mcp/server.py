@@ -79,7 +79,7 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         return scoped(codebase, lambda: calls.callees(driver, codebase, symbol, depth, limit))
 
     @mcp.tool(annotations=READ_ONLY)
-    def impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 12) -> Impact:
+    def impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact:
         """What depends on `symbol` (and on everything it defines): code that calls, inherits,
         references or imports it, up to `max_depth` (1 to 5) edges away, grouped by layer,
         each with its edge path back. `total` counts all dependents, including those cut by

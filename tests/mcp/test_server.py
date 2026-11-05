@@ -144,7 +144,7 @@ def test_defaults_are_the_documented_limits(server: FastMCP) -> None:
     assert defaults("find_symbol") == {"kind": "any", "limit": 10}
     assert defaults("callers") == {"depth": 1, "limit": 12}
     assert defaults("callees") == {"depth": 1, "limit": 12}
-    assert defaults("impact_of") == {"max_depth": 3, "limit": 12}
+    assert defaults("impact_of") == {"max_depth": 3, "limit": 8}
     assert defaults("search_docs") == {"limit": 5}
 
 

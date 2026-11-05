@@ -7,8 +7,8 @@ General knowledge graph over any Python codebase and its docs, served to agents 
 - Fetch benchmark repos: `uv run python scripts/fetch_codebases.py` (Mealie and httpx into `vendor/`, gitignored; never commit them)
 - Neo4j: `docker compose up -d neo4j` (browser at http://localhost:7474, login `neo4j` / `memex-dev-password`, override with `NEO4J_PASSWORD`; `docker compose down -v` wipes the data)
 - Unit tests: `uv run pytest` (default run: no DB, no `vendor/`; excludes the `neo4j` and `realrepo` markers)
-- Neo4j tests: `uv run pytest -m neo4j` (needs Docker; uses a throwaway testcontainer)
-- Real-repo smoke tests (Mealie, httpx): `uv run pytest -m realrepo` (needs fetched `vendor/`)
+- Neo4j tests: `uv run pytest -m "neo4j and not realrepo"` (needs Docker; uses a throwaway testcontainer)
+- Real-repo smoke tests (Mealie, httpx): `uv run pytest -m realrepo` (needs fetched `vendor/`; the tool tests among them, `-m "neo4j and realrepo"`, also need Docker)
 - Lint and format: `uv run ruff check .` and `uv run ruff format .`
 - From Phase 3: `uv run memex index <codebase>` and `uv run memex stats <codebase>`. From Phase 5: `uv run memex serve`.
 - HTML views of all docs: `python3 scripts/render_docs.py` (writes `docs/html/`, open e.g. `open docs/html/DESIGN.html`)

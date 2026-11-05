@@ -115,20 +115,20 @@ BASE_GROUPS = [
 
 
 def test_dependents_are_grouped_by_layer_and_ordered_by_distance(indexed: Driver) -> None:
-    impact = impact_of(indexed, "layered_app", "BaseService")
+    impact = impact_of(indexed, "layered_app", "BaseService", limit=12)
 
     assert impact.codebase == "layered_app"
     assert impact.symbol is not None and impact.symbol.qualname == BASE
     assert impact.max_depth == 3
     assert groups(impact) == BASE_GROUPS
-    assert impact.total == 12  # all 12 kept: the default limit is 12
+    assert impact.total == 12  # all 12 kept at limit 12
     # 7 docs relate (services.md, routes.md, extra0..4), more than the cap of 5
     assert len(impact.docs) == 5
     assert impact.truncated is True
 
 
 def test_each_dependent_carries_its_path_back_to_the_start(indexed: Driver) -> None:
-    impact = impact_of(indexed, "layered_app", "BaseService")
+    impact = impact_of(indexed, "layered_app", "BaseService", limit=12)
 
     assert path_of(impact, ORDER_SERVICE) == [PathStep(edge="INHERITS", to=BASE)]
     assert path_of(impact, ORDER_MODULE) == [PathStep(edge="IMPORTS", to=BASE)]
@@ -263,6 +263,15 @@ def test_an_unknown_symbol_returns_nothing(indexed: Driver) -> None:
     impact = impact_of(indexed, "layered_app", "Nope")
 
     assert (impact.symbol, impact.candidates, impact.layers, impact.total) == (None, [], [], 0)
+
+
+def test_the_default_limit_keeps_the_closest_eight(indexed: Driver) -> None:
+    impact = impact_of(indexed, "layered_app", "BaseService")
+
+    kept = [(d.symbol.qualname, d.distance) for g in impact.layers for d in g.dependents]
+    assert len(kept) == 8
+    assert impact.total == 12
+    assert impact.truncated is True
 
 
 @pytest.mark.parametrize(("max_depth", "limit"), [(0, 12), (6, 12), (3, 0), (3, 201)])

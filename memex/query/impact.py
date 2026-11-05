@@ -42,7 +42,7 @@ _DOCS = (
 
 
 def impact_of(
-    driver: Driver, codebase: str, symbol: str, max_depth: int = 3, limit: int = 12
+    driver: Driver, codebase: str, symbol: str, max_depth: int = 3, limit: int = 8
 ) -> Impact:
     """Code that depends on `symbol`, up to `max_depth` edges away, and the docs about it."""
     check_depth(max_depth, "max_depth")
