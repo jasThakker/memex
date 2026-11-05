@@ -1,2 +1,11 @@
 # Generated HTML views of the Markdown docs (scripts/render_docs.py)
 docs/html/
+
+# Benchmark repos fetched by scripts/fetch_codebases.py (never committed)
+vendor/
+
+# Python and tooling
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
