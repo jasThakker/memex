@@ -34,7 +34,8 @@ PAGE_TEMPLATE = """<!doctype html>
             --code-bg: #151b23; --link: #4493f8; }}
   }}
   body {{ background: var(--bg); color: var(--fg); margin: 0;
-         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }}
+         font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+               Arial, sans-serif; }}
   main {{ max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }}
   .source {{ color: var(--muted); font-size: 13px; margin-bottom: 24px; }}
   a {{ color: var(--link); }}
@@ -44,7 +45,8 @@ PAGE_TEMPLATE = """<!doctype html>
   pre {{ background: var(--code-bg); padding: 16px; border-radius: 6px; overflow-x: auto; }}
   pre code {{ background: none; padding: 0; }}
   table {{ border-collapse: collapse; display: block; overflow-x: auto; margin: 16px 0; }}
-  th, td {{ border: 1px solid var(--border); padding: 6px 12px; text-align: left; vertical-align: top; }}
+  th, td {{ border: 1px solid var(--border); padding: 6px 12px;
+           text-align: left; vertical-align: top; }}
   th {{ background: var(--code-bg); }}
   .mermaid {{ text-align: center; margin: 16px 0; }}
 </style>
@@ -111,10 +113,7 @@ def render(source: Path) -> Path:
 
 
 def main(args: list[str]) -> int:
-    if args:
-        sources = [Path(arg).resolve() for arg in args]
-    else:
-        sources = find_markdown_files()
+    sources = [Path(arg).resolve() for arg in args] if args else find_markdown_files()
     for source in sources:
         if source.suffix != ".md" or not source.is_file():
             print(f"skipped (not a Markdown file): {source}", file=sys.stderr)

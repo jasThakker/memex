@@ -79,6 +79,8 @@ Memex works on any Python codebase. The core (walker, parser, resolver, classifi
 
 Every codebase has a name, and every node carries a `codebase` property. Only `root` and `packages` are required; everything else is optional.
 
+Paths: `root` is relative to `memex.toml`; `exclude`, `docs` and `doc_kinds` globs are relative to `root`; `layers` keys are relative to each package directory. Optional keys default to "no rules" (empty lists and tables, no domain normalization). `source`, `ref` and `commit` are set together or not at all, and unknown keys are an error.
+
 ```toml
 [codebases.httpx]                  # minimal entry: defaults only
 root = "vendor/httpx"

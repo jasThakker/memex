@@ -1,0 +1,183 @@
+# Evaluation questions for Mealie v3.30.0 (DESIGN.md section 14).
+# Drafted in Phase 1 by the built-in Explore agent before any Memex tools existed.
+# Every item was checked to exist and exhaustive answers were re-grepped by Claude;
+# q02, q08, q10, q11 and q12 were then verified by hand (2026-11-05).
+# Paths are relative to vendor/mealie. Doc references are path#Heading, using the
+# heading's plain text (Markdown links reduced to their visible text).
+
+- id: q01
+  category: locate
+  question: "Where is the interface for ingredient parsers defined, and which concrete parser classes implement it?"
+  expected:
+    symbols:
+      - mealie.services.parser_services._base.ABCIngredientParser
+      - mealie.services.parser_services.ingredient_parser.BruteForceParser
+      - mealie.services.parser_services.ingredient_parser.NLPParser
+      - mealie.services.parser_services.openai.parser.OpenAIParser
+    docs: []
+  evidence: "ABCIngredientParser -> mealie/services/parser_services/_base.py:130; BruteForceParser -> mealie/services/parser_services/ingredient_parser.py:36; NLPParser -> mealie/services/parser_services/ingredient_parser.py:98; OpenAIParser -> mealie/services/parser_services/openai/parser.py:20"
+  note: "Grepped the whole backend for ABCIngredientParser; no other subclasses. parser_services/brute/ holds helpers, not a subclass."
+
+- id: q02
+  category: locate
+  question: "In a controller that subclasses BaseUserController, where does `self.repos` come from, and what decides the group/household scope it is built with? Where does the admin controller change this?"
+  expected:
+    symbols:
+      - mealie.routes._base.base_controllers._BaseController.repos
+      - mealie.routes._base.base_controllers.BaseUserController.group_id
+      - mealie.routes._base.base_controllers.BaseUserController.household_id
+      - mealie.routes._base.base_controllers.BaseAdminController.repos
+      - mealie.repos.repository_factory.AllRepositories
+    docs: []
+  evidence: "_BaseController.repos (lazily builds AllRepositories(self.session, group_id=self.group_id, household_id=self.household_id)) -> mealie/routes/_base/base_controllers.py:45-49; BaseUserController.group_id (returns self.user.group_id) -> mealie/routes/_base/base_controllers.py:148-150; BaseUserController.household_id -> mealie/routes/_base/base_controllers.py:152-154; BaseAdminController.repos (group_id=None, household_id=None) -> mealie/routes/_base/base_controllers.py:174-179; AllRepositories -> mealie/repos/repository_factory.py:254"
+  note: "User comes from Depends(get_current_user) at base_controllers.py:138 (get_admin_user for admins at :172). Controllers build AllRepositories directly here, not via Depends(get_repositories) as AGENTS.md describes; get_repositories (mealie/repos/all_repositories.py:8) is a thin wrapper used e.g. by BasePublicHouseholdExploreController.cross_household_repos."
+
+- id: q03
+  category: locate
+  question: "Where are the HttpRepo CRUD mixin and the @controller class-based-view decorator that route controllers use defined?"
+  expected:
+    symbols:
+      - mealie.routes._base.mixins.HttpRepo
+      - mealie.routes._base.controller.controller
+    docs: []
+  evidence: "HttpRepo -> mealie/routes/_base/mixins.py:36; controller -> mealie/routes/_base/controller.py:20"
+  note: ""
+
+- id: q04
+  category: callers
+  question: "What calls RecipeService.create_one? List every caller in the backend."
+  expected:
+    symbols:
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController._finish_recipe_from_web
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.create_one
+      - mealie.services.scraper.recipe_bulk_scraper.RecipeBulkScraperService.scrape
+      - mealie.services.migrations._migration_base.BaseMigrator.import_recipes_to_database
+      - mealie.services.recipe.recipe_service.RecipeService.create_from_mealie_export
+      - mealie.services.recipe.recipe_service.RecipeService.create_from_zip
+      - mealie.services.recipe.ai_recipe_service.AIRecipeService.create_from_ai
+    docs: []
+  evidence: "RecipeController._finish_recipe_from_web -> mealie/routes/recipe/recipe_crud_routes.py:405,414 (self.service is the RecipeService from BaseRecipeController.service, mealie/routes/recipe/_base.py:51-52); RecipeController.create_one -> mealie/routes/recipe/recipe_crud_routes.py:652,655; RecipeBulkScraperService.scrape -> mealie/services/scraper/recipe_bulk_scraper.py:82,111 (self.service: RecipeService injected at :24-27); BaseMigrator.import_recipes_to_database -> mealie/services/migrations/_migration_base.py:168,223 (self.recipe_service = RecipeService(...) at :80); RecipeService.create_from_mealie_export -> mealie/services/recipe/recipe_service.py:493,512; RecipeService.create_from_zip -> mealie/services/recipe/recipe_service.py:518,543; AIRecipeService.create_from_ai -> mealie/services/recipe/ai_recipe_service.py:32,60 (AIRecipeService subclasses RecipeService)"
+  note: "Grepped every `create_one(` in mealie/ and kept only receivers that resolve to RecipeService. HttpRepo mixin and label service calls (controller_labels.py:59, seeders.py:96) are different methods. Direct callers only."
+
+- id: q05
+  category: callers
+  question: "Which code constructs a DataMatcher (the food/unit matcher from the parser services)?"
+  expected:
+    symbols:
+      - mealie.services.parser_services._base.ABCIngredientParser.__init__
+      - mealie.services.household_services.shopping_lists.ShoppingListService.__init__
+      - mealie.services.recipe.recipe_service.RecipeService._get_data_matcher
+      - mealie.services.migrations.cookn.CooknMigrator.__init__
+      - mealie.services.migrations.cookn.CooknMigrator._parse_units_table
+      - mealie.services.migrations.cookn.CooknMigrator._parse_foods_table
+      - mealie.services.migrations.cookn.CooknMigrator._process_cookbook
+    docs: []
+  evidence: "ABCIngredientParser.__init__ -> mealie/services/parser_services/_base.py:136; ShoppingListService.__init__ -> mealie/services/household_services/shopping_lists.py:45; RecipeService._get_data_matcher -> mealie/services/recipe/recipe_service.py:311-318; CooknMigrator.__init__ -> mealie/services/migrations/cookn.py:78; CooknMigrator._parse_units_table -> mealie/services/migrations/cookn.py:102; CooknMigrator._parse_foods_table -> mealie/services/migrations/cookn.py:125; CooknMigrator._process_cookbook -> mealie/services/migrations/cookn.py:361"
+  note: "Construction sites only (`DataMatcher(`). RecipeService._transform_food (recipe_service.py:343) and _transform_unit (:375) use the matcher via _get_data_matcher but do not construct one."
+
+- id: q06
+  category: callers
+  question: "Which ORM models depend on the shopping_lists table through a foreign key to shopping_lists.id?"
+  expected:
+    symbols:
+      - mealie.db.models.household.shopping_list.ShoppingListItem
+      - mealie.db.models.household.shopping_list.ShoppingListRecipeReference
+      - mealie.db.models.household.shopping_list.ShoppingListMultiPurposeLabel
+      - mealie.db.models.recipe.api_extras.ShoppingListExtras
+    docs: []
+  evidence: "ShoppingListItem.shopping_list_id -> mealie/db/models/household/shopping_list.py:57; ShoppingListRecipeReference.shopping_list_id -> mealie/db/models/household/shopping_list.py:106; ShoppingListMultiPurposeLabel.shopping_list_id -> mealie/db/models/household/shopping_list.py:128; ShoppingListExtras.shopping_list_id -> mealie/db/models/recipe/api_extras.py:55-56"
+  note: "Grepped all of mealie/db/models for ForeignKey(\"shopping_lists.id\"): exactly 4 hits. Group.shopping_lists and User.shopping_lists are reverse relationships (FKs live on ShoppingList), so excluded."
+
+- id: q07
+  category: layer_domain
+  question: "Which feature-area modules (routes and services) construct OpenAIService directly, i.e. which parts of the backend depend on the AI provider service?"
+  expected:
+    symbols:
+      - mealie.routes.admin.admin_management_ai_providers
+      - mealie.routes.admin.admin_debug
+      - mealie.routes.groups.controller_group_ai_providers
+      - mealie.services.scraper.scraper_strategies
+      - mealie.services.parser_services.openai.parser
+      - mealie.services.recipe.ai_recipe_service
+    docs: []
+  evidence: "admin_management_ai_providers -> mealie/routes/admin/admin_management_ai_providers.py:54,59,64; admin_debug -> mealie/routes/admin/admin_debug.py:38; controller_group_ai_providers -> mealie/routes/groups/controller_group_ai_providers.py:64,94,113; scraper_strategies (RecipeScraperOpenAI.build_context, RecipeScraperOpenAITranscription.parse) -> mealie/services/scraper/scraper_strategies.py:378,414; openai parser (OpenAIParser._parse) -> mealie/services/parser_services/openai/parser.py:160; ai_recipe_service (AIRecipeService.build_recipe) -> mealie/services/recipe/ai_recipe_service.py:89; OpenAIService itself -> mealie/services/openai/openai.py:140"
+  note: "Direct construction only. recipe_crud_routes reaches it indirectly via AIRecipeService (recipe_crud_routes.py:492); routes.parser via get_parser -> OpenAIParser."
+
+- id: q08
+  category: layer_domain
+  question: "AGENTS.md says repositories automatically filter by group/household. Which layer actually applies that scoping, which classes or methods do it, and which controller base deliberately bypasses it?"
+  expected:
+    symbols:
+      - mealie.repos.repository_generic.RepositoryGeneric._filter_builder
+      - mealie.repos.repository_generic.GroupRepositoryGeneric.__init__
+      - mealie.repos.repository_generic.HouseholdRepositoryGeneric.__init__
+      - mealie.routes._base.base_controllers.BaseAdminController.repos
+    docs:
+      - AGENTS.md#Cross-Cutting Concerns
+  evidence: "RepositoryGeneric._filter_builder (adds group_id/household_id to filter_by) -> mealie/repos/repository_generic.py:92-100; GroupRepositoryGeneric.__init__ (raises if group_id NOT_SET) -> mealie/repos/repository_generic.py:493-505; HouseholdRepositoryGeneric.__init__ (requires group_id and household_id) -> mealie/repos/repository_generic.py:509-526; BaseAdminController.repos (group_id=None, household_id=None) -> mealie/routes/_base/base_controllers.py:174-179; doc rule -> AGENTS.md:146,151-154"
+  note: "Answer layer: repos (mealie/repos). _filter_builder is used by get_all/get_one/page_all etc. (repository_generic.py:131,151,168-170,239,278,336). Side finding: RepositoryGeneric._query line 82 calls q.filter(...) without assigning the result (a no-op). Covers the generic mechanism only."
+
+- id: q09
+  category: doc_rules
+  question: "What do the project docs say about how I must (and must not) obtain a database session in routes versus services/scripts?"
+  expected:
+    symbols:
+      - mealie.db.db_setup.generate_session
+      - mealie.db.db_setup.session_context
+    docs:
+      - AGENTS.md#Backend Architecture (mealie/)
+      - AGENTS.md#Common Gotchas
+  evidence: "AGENTS.md#Backend Architecture (mealie/) -> AGENTS.md:33-35 (Depends(generate_session) in routes; session_context() in services/scripts); AGENTS.md#Common Gotchas -> AGENTS.md:219 (don't create sessions manually); generate_session -> mealie/db/db_setup.py:80 (docstring: only use with Depends, leaks otherwise); session_context -> mealie/db/db_setup.py:64"
+  note: "generate_session docstring (db_setup.py:85) says to use `with_session` instead, but no such function exists; the intended one is session_context. Contributors docs say nothing about sessions."
+
+- id: q10
+  category: doc_rules
+  question: "After I change a Pydantic schema in mealie/schema/, what do the project docs say I must do (and must not edit by hand)?"
+  expected:
+    symbols: []
+    docs:
+      - AGENTS.md#Backend Architecture (mealie/)
+      - AGENTS.md#Essential Commands (via Task/Taskfile.yml)
+      - AGENTS.md#Frontend
+      - AGENTS.md#Cross-Cutting Concerns
+      - AGENTS.md#Before Submitting a PR
+      - AGENTS.md#What to Review
+      - AGENTS.md#Common Gotchas
+  evidence: "Backend Architecture -> AGENTS.md:28-31 (suffixes, __init__ exports generated, never edit TS types); Essential Commands -> AGENTS.md:69-71 (task dev:generate REQUIRED); Frontend -> AGENTS.md:130; Cross-Cutting Concerns -> AGENTS.md:148-151; Before Submitting a PR -> AGENTS.md:167; What to Review -> AGENTS.md:186,189-192; Common Gotchas -> AGENTS.md:217,220"
+  note: "'AGENTS.md#Frontend' is the '### Frontend' heading at line 128, not '### Frontend Architecture (frontend/)'. Contributors docs do not mention codegen."
+
+- id: q11
+  category: check_change
+  question: "I want to rename the AI provider field `base_url` (e.g. to `endpoint_url`). Which backend code is affected and which documented rules apply?"
+  expected:
+    symbols:
+      - mealie.db.models.group.ai_providers.AIProvider
+      - mealie.schema.group.ai_providers.AIProviderCreate
+      - mealie.schema.group.ai_providers.AIProviderCreate.validate_as_none
+      - mealie.routes.groups.controller_group_ai_providers.GroupAIProviderController.test_ai_provider
+      - mealie.routes.groups.controller_group_ai_providers.GroupAIProviderController.test_saved_ai_provider
+      - mealie.services.openai.openai.OpenAIService.get_client
+    docs:
+      - docs/docs/contributors/developers-guide/database-changes.md#Overview
+      - docs/docs/contributors/developers-guide/database-changes.md#Using Alembic to generate upgrade script
+      - AGENTS.md#Cross-Cutting Concerns
+      - AGENTS.md#What to Review
+      - docs/docs/contributors/developers-guide/code-contributions.md#We Use GitHub Flow, So All Code Changes Happen Through Pull Requests
+  evidence: "AIProvider.base_url column -> mealie/db/models/group/ai_providers.py:78; AIProviderCreate.base_url (inherited by Save/Update/Out) -> mealie/schema/group/ai_providers.py:14; validate_as_none field_validator('base_url') -> mealie/schema/group/ai_providers.py:29-31; test_ai_provider copies base_url -> mealie/routes/groups/controller_group_ai_providers.py:57; test_saved_ai_provider override dict -> mealie/routes/groups/controller_group_ai_providers.py:86; OpenAIService.get_client passes provider.base_url -> mealie/services/openai/openai.py:171; database-changes Overview -> docs/docs/contributors/developers-guide/database-changes.md:7; Alembic/SQLite+Postgres review -> database-changes.md:12-15; codegen after schema change -> AGENTS.md:148-151; review checklist -> AGENTS.md:189-192,204-206; update docs when APIs change -> docs/docs/contributors/developers-guide/code-contributions.md:15"
+  note: "Grepped `base_url` across mealie/; these are the only AI-provider hits. The existing alembic migration (2187537c52b8) and frontend types are out of scope but also affected. code-contributions.md item 5 added during hand verification."
+
+- id: q12
+  category: check_change
+  question: "I want to add a new ingredient parsing strategy selectable from the API. Which code must change or is affected, and what do the docs tell me to do?"
+  expected:
+    symbols:
+      - mealie.services.parser_services._base.ABCIngredientParser
+      - mealie.schema.recipe.recipe_ingredient.RegisteredParser
+      - mealie.services.parser_services.ingredient_parser.get_parser
+      - mealie.routes.parser.ingredient_parser.IngredientParserController.parse_ingredient
+      - mealie.routes.parser.ingredient_parser.IngredientParserController.parse_ingredients
+    docs:
+      - docs/docs/contributors/guides/ingredient-parser.md#Alternative Parsers
+      - AGENTS.md#Cross-Cutting Concerns
+  evidence: "ABCIngredientParser (abstract parse_one, parse) -> mealie/services/parser_services/_base.py:130,159-163; RegisteredParser enum (nlp/brute/openai) -> mealie/schema/recipe/recipe_ingredient.py:519-522; get_parser (special-cases openai, falls back to NLPParser) -> mealie/services/parser_services/ingredient_parser.py:318-329; parse_ingredient -> mealie/routes/parser/ingredient_parser.py:13-17; parse_ingredients -> mealie/routes/parser/ingredient_parser.py:19-22; Alternative Parsers doc -> docs/docs/contributors/guides/ingredient-parser.md:14; codegen after schema (enum) change -> AGENTS.md:148-151"
+  note: "The module-level __registrar dict (ingredient_parser.py:312) is where a new parser is registered, but it was dropped from expected during hand verification: it is a variable, and the graph only has module, class and function nodes. get_parser reads it, so it stands in for it. get_parser has exactly two callers (the two route methods), which need no change. The ingredient-parser doc is partly stale: it calls ABCIngredientParser a 'single method interface' (it has two abstract methods), and 'Improving The CRF Parser' points to a crfpp folder that does not exist in v3.30.0."
