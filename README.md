@@ -16,7 +16,7 @@ uv run memex stats httpx
 
 Then start Claude Code in this folder. `.mcp.json` registers the server (`uv run memex serve`); approve it when asked, or check it with `/mcp`. Ask, for example, "In httpx, what calls `Client.request`?".
 
-The tools: `list_codebases`, `find_symbol`, `callers`, `callees`, `impact_of`, `search_docs`. Every tool except `list_codebases` takes the codebase name explicitly.
+The tools: `list_codebases`, `find_symbol`, `callers`, `callees`, `impact_of`, `search_docs`, `check_change`. Every tool except `list_codebases` takes the codebase name explicitly. `check_change` takes a proposed change (a description, optionally its symbols) and returns the code it affects and the documented rules that apply, each quoted and cited.
 
 To index another repo, add a section to `memex.toml` (`root` and `packages` are enough) and run `uv run memex index <name>`.
 

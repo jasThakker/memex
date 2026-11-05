@@ -4,7 +4,9 @@ which documented rules apply. No LLM: the calling agent makes the final judgment
 - Symbols: the proposal's explicit `symbols` (stripped, empty ones skipped), or else the
   code-shaped names in its description (`rules.code_tokens`); at most MAX_TOKENS of them.
   Each goes through the symbol rule: one match is resolved, several are listed as ambiguous
-  with at most MAX_CANDIDATES candidates (never guessed), none is unresolved.
+  (never guessed), none is unresolved. An ambiguous name lists at most MAX_CANDIDATES
+  candidates, and all names together at most MAX_TOTAL_CANDIDATES, which keeps a result
+  within the size budget; a name past that total is listed with no candidates.
 - Affected: one impact walk from the start sets of all resolved symbols, AFFECTED_DEPTH
   edges deep, counted by layer (None last).
 - Guidelines from doc sections that MENTION a symbol in that walk (the resolved symbols,
@@ -48,7 +50,8 @@ from memex.query.rules import Sentence, code_tokens, modal_word, section_sentenc
 from memex.query.symbols import resolve_symbol
 
 MAX_TOKENS = 10
-MAX_CANDIDATES = 5
+MAX_CANDIDATES = 3
+MAX_TOTAL_CANDIDATES = 8
 AFFECTED_DEPTH = 3
 MAX_GUIDELINES = 6
 PER_SECTION = 2
@@ -99,13 +102,16 @@ def check_change(driver: Driver, codebase: str, proposal: ChangeProposal) -> Cha
     resolved: dict[str, SymbolRef] = {}
     ambiguous: list[AmbiguousName] = []
     unresolved: list[str] = []
+    left = MAX_TOTAL_CANDIDATES
     for name in names[:MAX_TOKENS]:
         ref, candidates, cut = resolve_symbol(driver, codebase, name, MAX_CANDIDATES)
         if ref is not None:
             resolved.setdefault(ref.qualname, ref)
         elif candidates:
-            ambiguous.append(AmbiguousName(name=name, candidates=candidates))
-            truncated = truncated or cut
+            kept = candidates[:left]
+            left -= len(kept)
+            ambiguous.append(AmbiguousName(name=name, candidates=kept))
+            truncated = truncated or cut or len(kept) < len(candidates)
         else:
             unresolved.append(name)
 

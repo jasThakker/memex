@@ -543,3 +543,18 @@ def test_explicit_symbols_are_stripped_and_empty_ones_skipped(indexed: Driver) -
 
     assert [a.name for a in result.ambiguous] == ["get_one"]
     assert resolved(result) == [BASE]
+
+
+def test_candidates_share_one_cap_across_ambiguous_names(
+    indexed: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # get_one has 2 candidates, __init__ 3, get 2; 4 in total may be listed
+    monkeypatch.setattr(change, "MAX_TOTAL_CANDIDATES", 4)
+    result = check(indexed, "Change `get_one`, `__init__` and `get`.")
+
+    assert [(a.name, len(a.candidates)) for a in result.ambiguous] == [
+        ("get_one", 2),
+        ("__init__", 2),
+        ("get", 0),  # still listed: call find_symbol for it
+    ]
+    assert result.truncated is True
