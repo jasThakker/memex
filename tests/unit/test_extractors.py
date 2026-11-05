@@ -293,3 +293,26 @@ def test_lambda_column_attribute_type_checking_and_self_references() -> None:
         ("pkg.models.Node", "pkg.other.Team", "relationship", "team"),
         ("pkg.models.Node", "pkg.models.Node", "relationship", "peers"),
     }
+
+
+def test_a_declared_attr_tablename_on_a_base_maps_its_subclasses() -> None:
+    edges = extract(
+        {
+            "pkg/__init__.py": "",
+            "pkg/models.py": """
+                from sqlalchemy.orm import declared_attr, relationship
+
+                class Base:
+                    @declared_attr
+                    def __tablename__(cls) -> str:
+                        return cls.__name__.lower()
+
+                class User(Base): ...
+
+                class Order(Base):
+                    user = relationship("User")
+            """,
+        }
+    )
+
+    assert pairs(edges) == {("pkg.models.Order", "pkg.models.User", "relationship", "user")}

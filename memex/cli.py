@@ -2,7 +2,8 @@
 
 `index` parses the codebase, replaces it in Neo4j and prints a summary; `stats` prints the same
 summary from what Neo4j holds. Exit codes: 0 success, 1 a database problem or a codebase that
-is not indexed, 2 a usage or config error. `memex serve` arrives in Phase 5.
+is not indexed, 2 a usage or config error (including a missing package directory or a
+malformed NEO4J_URI). `memex serve` arrives in Phase 5.
 """
 
 import argparse
@@ -12,12 +13,13 @@ import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
-from neo4j.exceptions import AuthError, ServiceUnavailable
+from neo4j.exceptions import AuthError, ConfigurationError, Neo4jError, ServiceUnavailable
 
 from memex.config import Codebase, ConfigError, UnknownCodebaseError, load_config
 from memex.graph.model import CodebaseNode, GraphBatch, ModuleNode
 from memex.graph.store import connect, ensure_schema, label_of, replace_codebase
 from memex.ingest.code import index_code
+from memex.ingest.code.walker import WalkerError
 from memex.query.codebases import codebase_stats
 from memex.query.models import CodebaseStats
 
@@ -31,17 +33,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ConfigError, UnknownCodebaseError) as error:
         print(f"memex: {error}", file=sys.stderr)
         return 2
+    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
     try:
         if args.command == "index":
             return _index(codebase)
         return _stats(codebase.name)
-    except ConfigError as error:
+    except (ConfigError, WalkerError) as error:
         print(f"memex: {error}", file=sys.stderr)
         return 2
-    except (ServiceUnavailable, AuthError) as error:
-        uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    except ConfigurationError as error:
+        print(f"memex: invalid NEO4J_URI {uri!r}: {error}", file=sys.stderr)
+        return 2
+    except AuthError:
+        user = os.environ.get("NEO4J_USER", "neo4j")
+        print(
+            f"memex: Neo4j rejected the credentials for user {user!r} at {uri}; "
+            "check NEO4J_USER and NEO4J_PASSWORD",
+            file=sys.stderr,
+        )
+        return 1
+    except ServiceUnavailable as error:
         print(f"memex: cannot reach Neo4j at {uri}: {error}", file=sys.stderr)
         print("memex: is it running? `docker compose up -d neo4j`", file=sys.stderr)
+        return 1
+    except Neo4jError as error:
+        action = "writing" if args.command == "index" else "reading"
+        print(f"memex: Neo4j error while {action} {codebase.name}: {error}", file=sys.stderr)
         return 1
 
 

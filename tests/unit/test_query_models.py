@@ -5,6 +5,10 @@ to them needs an ADR. Results hold locations, signatures and first docstring lin
 source bodies. Every result that holds a list carries `truncated`.
 """
 
+import json
+import os
+from pathlib import Path
+
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -92,9 +96,11 @@ CONTRACT: dict[type[BaseModel], set[str]] = {
     m.LayerCount: {"layer", "count"},
     m.ImpactSummary: {"total", "layers"},
     m.Guideline: {"stance", "quote", "citation", "matched_on"},
+    m.AmbiguousName: {"name", "candidates"},
     m.ChangeCheck: {
         "codebase",
         "resolved_symbols",
+        "ambiguous",
         "unresolved",
         "affected",
         "guidelines",
@@ -281,6 +287,17 @@ EXAMPLES: list[BaseModel] = [
     m.ChangeCheck(
         codebase="shop",
         resolved_symbols=[RECIPE],
+        ambiguous=[
+            m.AmbiguousName(
+                name="create",
+                candidates=[
+                    SERVICE,
+                    SERVICE.model_copy(
+                        update={"qualname": "app.services.user_service.UserService.create"}
+                    ),
+                ],
+            )
+        ],
         unresolved=["RecipeThing"],
         affected=m.ImpactSummary(total=4, layers=[m.LayerCount(layer=None, count=4)]),
         guidelines=[
@@ -311,3 +328,26 @@ def test_examples_round_trip_through_json(example: BaseModel) -> None:
 
 def test_change_proposal_symbols_default_to_empty() -> None:
     assert m.ChangeProposal(description="Rename RecipeModel.slug").symbols == []
+
+
+SCHEMA_SNAPSHOT = Path(__file__).with_name("contract_schema.json")
+
+
+def _shape(schema: object) -> object:
+    """A JSON schema without docstrings and titles: rewording a docstring is not a change."""
+    if isinstance(schema, dict):
+        return {k: _shape(v) for k, v in schema.items() if k not in ("description", "title")}
+    if isinstance(schema, list):
+        return [_shape(item) for item in schema]
+    return schema
+
+
+def test_contract_types_match_the_committed_snapshot() -> None:
+    """Field types, required fields and defaults are frozen too, not only names (ADR-001).
+
+    After an ADR-approved change, regenerate with MEMEX_UPDATE_CONTRACT=1 and review the diff.
+    """
+    schemas = {model.__name__: _shape(model.model_json_schema()) for model in CONTRACT}
+    if os.environ.get("MEMEX_UPDATE_CONTRACT") == "1":
+        SCHEMA_SNAPSHOT.write_text(json.dumps(schemas, indent=2, sort_keys=True) + "\n")
+    assert schemas == json.loads(SCHEMA_SNAPSHOT.read_text())

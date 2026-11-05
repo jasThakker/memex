@@ -198,9 +198,17 @@ class Guideline(Contract):
     matched_on: Literal["mention", "search"]
 
 
+class AmbiguousName(Contract):
+    """A short name in a proposal that matches more than one symbol."""
+
+    name: str
+    candidates: list[SymbolRef]
+
+
 class ChangeCheck(Contract):
     codebase: str
     resolved_symbols: list[SymbolRef]
+    ambiguous: list[AmbiguousName] = []  # never guessed: the caller picks
     unresolved: list[str]
     affected: ImpactSummary
     guidelines: list[Guideline]

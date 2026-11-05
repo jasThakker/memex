@@ -89,6 +89,17 @@ def validate(batch: GraphBatch) -> None:
     foreign = sorted(node.id for node in batch.nodes if node.codebase != batch.codebase)
     if foreign:
         raise ValueError(f"nodes from another codebase than {batch.codebase!r}: {foreign[:5]}")
+    prefix = f"{batch.codebase}:"
+    misplaced = sorted(
+        node.id
+        for node in batch.nodes
+        if not isinstance(node, CodebaseNode) and not node.id.startswith(prefix)
+    )
+    if misplaced:
+        raise ValueError(f"node ids without the id prefix {prefix!r}: {misplaced[:5]}")
+    codebase_nodes = [node for node in batch.nodes if isinstance(node, CodebaseNode)]
+    if [(node.id, node.name) for node in codebase_nodes] != [(batch.codebase, batch.codebase)]:
+        raise ValueError(f"a batch needs exactly one Codebase node {batch.codebase!r}")
     unknown = sorted({edge.kind for edge in batch.edges} - EDGE_KINDS)
     if unknown:
         raise ValueError(f"unknown edge kinds: {unknown}")

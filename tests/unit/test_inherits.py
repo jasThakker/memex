@@ -174,3 +174,21 @@ def test_a_class_named_after_its_base_inherits_from_that_base() -> None:
         ("pkg.a.TestCase", "ext:unittest.TestCase", 0),
         ("pkg.a.Base", "pkg.base.Base", 0),
     }
+
+
+def test_a_subscripted_base_named_after_its_class_is_the_imported_one() -> None:
+    modules = parse_files(
+        {
+            "pkg/__init__.py": "",
+            "pkg/base.py": "class Repo: ...\n",
+            "pkg/a.py": """
+                from pkg.base import Repo
+
+                class Repo(Repo[int]): ...
+            """,
+        }
+    )
+
+    edges, _ = link_inherits("lib", SymbolTable(modules))
+
+    assert bases(edges, "lib") == {("pkg.a.Repo", "pkg.base.Repo", 0)}

@@ -101,3 +101,34 @@ def test_a_command_is_required() -> None:
     with pytest.raises(SystemExit) as raised:
         main([])
     assert raised.value.code == 2
+
+
+def test_a_missing_package_directory_exits_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The usual first-run mistake: indexing before scripts/fetch_codebases.py has run.
+    config = tmp_path / "memex.toml"
+    config.write_text('[codebases.ghost]\nroot = "vendor/ghost"\npackages = ["ghost"]\n')
+
+    assert main(["index", "ghost", "--config", str(config)]) == 2
+    assert "package directory 'ghost' not found" in capsys.readouterr().err
+
+
+def test_an_unreachable_database_exits_1(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:1")  # nothing listens there
+
+    assert main(["stats", "layered_app", "--config", CONFIG]) == 1
+    error = capsys.readouterr().err
+    assert "cannot reach Neo4j at bolt://localhost:1" in error
+    assert "docker compose up -d neo4j" in error
+
+
+def test_a_malformed_neo4j_uri_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("NEO4J_URI", "nonsense://localhost")
+
+    assert main(["stats", "layered_app", "--config", CONFIG]) == 2
+    assert "invalid NEO4J_URI 'nonsense://localhost'" in capsys.readouterr().err

@@ -1,0 +1,2154 @@
+{
+  "AmbiguousName": {
+    "$defs": {
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "candidates": {
+        "items": {
+          "$ref": "#/$defs/SymbolRef"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "candidates"
+    ],
+    "type": "object"
+  },
+  "CallGraph": {
+    "$defs": {
+      "CallHop": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "enum": [
+              "exact",
+              "inferred",
+              "ambiguous"
+            ],
+            "type": "string"
+          },
+          "distance": {
+            "type": "integer"
+          },
+          "function": {
+            "$ref": "#/$defs/SymbolRef"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "via": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "function",
+          "via",
+          "line",
+          "confidence",
+          "distance"
+        ],
+        "type": "object"
+      },
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "calls": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/CallHop"
+        },
+        "type": "array"
+      },
+      "candidates": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SymbolRef"
+        },
+        "type": "array"
+      },
+      "codebase": {
+        "type": "string"
+      },
+      "depth": {
+        "type": "integer"
+      },
+      "direction": {
+        "enum": [
+          "callers",
+          "callees"
+        ],
+        "type": "string"
+      },
+      "symbol": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SymbolRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "codebase",
+      "symbol",
+      "direction",
+      "depth"
+    ],
+    "type": "object"
+  },
+  "CallHop": {
+    "$defs": {
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "confidence": {
+        "enum": [
+          "exact",
+          "inferred",
+          "ambiguous"
+        ],
+        "type": "string"
+      },
+      "distance": {
+        "type": "integer"
+      },
+      "function": {
+        "$ref": "#/$defs/SymbolRef"
+      },
+      "line": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "via": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "function",
+      "via",
+      "line",
+      "confidence",
+      "distance"
+    ],
+    "type": "object"
+  },
+  "ChangeCheck": {
+    "$defs": {
+      "AmbiguousName": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/$defs/SymbolRef"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "candidates"
+        ],
+        "type": "object"
+      },
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "end_line": {
+            "type": "integer"
+          },
+          "heading_path": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "heading_path",
+          "start_line",
+          "end_line"
+        ],
+        "type": "object"
+      },
+      "Guideline": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "$ref": "#/$defs/Citation"
+          },
+          "matched_on": {
+            "enum": [
+              "mention",
+              "search"
+            ],
+            "type": "string"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "stance": {
+            "enum": [
+              "forbids",
+              "encourages",
+              "related"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "stance",
+          "quote",
+          "citation",
+          "matched_on"
+        ],
+        "type": "object"
+      },
+      "ImpactSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "layers": {
+            "items": {
+              "$ref": "#/$defs/LayerCount"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "layers"
+        ],
+        "type": "object"
+      },
+      "LayerCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "count"
+        ],
+        "type": "object"
+      },
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "affected": {
+        "$ref": "#/$defs/ImpactSummary"
+      },
+      "ambiguous": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/AmbiguousName"
+        },
+        "type": "array"
+      },
+      "codebase": {
+        "type": "string"
+      },
+      "guidelines": {
+        "items": {
+          "$ref": "#/$defs/Guideline"
+        },
+        "type": "array"
+      },
+      "resolved_symbols": {
+        "items": {
+          "$ref": "#/$defs/SymbolRef"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      },
+      "unresolved": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "codebase",
+      "resolved_symbols",
+      "unresolved",
+      "affected",
+      "guidelines"
+    ],
+    "type": "object"
+  },
+  "ChangeProposal": {
+    "additionalProperties": false,
+    "properties": {
+      "symbols": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "description"
+    ],
+    "type": "object"
+  },
+  "Citation": {
+    "additionalProperties": false,
+    "properties": {
+      "end_line": {
+        "type": "integer"
+      },
+      "heading_path": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "start_line": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "path",
+      "heading_path",
+      "start_line",
+      "end_line"
+    ],
+    "type": "object"
+  },
+  "ClassSummary": {
+    "additionalProperties": false,
+    "properties": {
+      "bases": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "line": {
+        "type": "integer"
+      },
+      "methods": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "line",
+      "bases",
+      "methods"
+    ],
+    "type": "object"
+  },
+  "CodebaseInfo": {
+    "additionalProperties": false,
+    "properties": {
+      "commit": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "edges": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "extractors": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "files": {
+        "type": "integer"
+      },
+      "indexed_at": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "nodes": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "parse_errors": {
+        "default": 0,
+        "type": "integer"
+      },
+      "ref": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "source": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "unresolved_calls": {
+        "default": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "name",
+      "indexed_at",
+      "files"
+    ],
+    "type": "object"
+  },
+  "CodebaseList": {
+    "$defs": {
+      "CodebaseInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "edges": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "type": "object"
+          },
+          "extractors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "indexed_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nodes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "type": "object"
+          },
+          "parse_errors": {
+            "default": 0,
+            "type": "integer"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "unresolved_calls": {
+            "default": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "indexed_at",
+          "files"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "codebases": {
+        "items": {
+          "$ref": "#/$defs/CodebaseInfo"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "codebases"
+    ],
+    "type": "object"
+  },
+  "CodebaseStats": {
+    "additionalProperties": false,
+    "properties": {
+      "commit": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "domains": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "edges": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "extractors": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "files": {
+        "type": "integer"
+      },
+      "indexed_at": {
+        "type": "string"
+      },
+      "layers": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "name": {
+        "type": "string"
+      },
+      "nodes": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "parse_errors": {
+        "default": 0,
+        "type": "integer"
+      },
+      "ref": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "source": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "unresolved_calls": {
+        "default": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "name",
+      "indexed_at",
+      "files"
+    ],
+    "type": "object"
+  },
+  "Dependent": {
+    "$defs": {
+      "PathStep": {
+        "additionalProperties": false,
+        "properties": {
+          "edge": {
+            "enum": [
+              "CALLS",
+              "INHERITS",
+              "REFERENCES",
+              "IMPORTS"
+            ],
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "edge",
+          "to"
+        ],
+        "type": "object"
+      },
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "distance": {
+        "type": "integer"
+      },
+      "path": {
+        "items": {
+          "$ref": "#/$defs/PathStep"
+        },
+        "type": "array"
+      },
+      "symbol": {
+        "$ref": "#/$defs/SymbolRef"
+      }
+    },
+    "required": [
+      "symbol",
+      "distance",
+      "path"
+    ],
+    "type": "object"
+  },
+  "DocHit": {
+    "additionalProperties": false,
+    "properties": {
+      "end_line": {
+        "type": "integer"
+      },
+      "heading_path": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "mentions": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "path": {
+        "type": "string"
+      },
+      "score": {
+        "type": "number"
+      },
+      "snippet": {
+        "type": "string"
+      },
+      "start_line": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "path",
+      "heading_path",
+      "kind",
+      "start_line",
+      "end_line",
+      "snippet",
+      "score"
+    ],
+    "type": "object"
+  },
+  "DocRef": {
+    "additionalProperties": false,
+    "properties": {
+      "end_line": {
+        "type": "integer"
+      },
+      "heading_path": {
+        "type": "string"
+      },
+      "mentions": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "path": {
+        "type": "string"
+      },
+      "start_line": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "path",
+      "heading_path",
+      "start_line",
+      "end_line"
+    ],
+    "type": "object"
+  },
+  "DocSearch": {
+    "$defs": {
+      "DocHit": {
+        "additionalProperties": false,
+        "properties": {
+          "end_line": {
+            "type": "integer"
+          },
+          "heading_path": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "mentions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "heading_path",
+          "kind",
+          "start_line",
+          "end_line",
+          "snippet",
+          "score"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "codebase": {
+        "type": "string"
+      },
+      "hits": {
+        "items": {
+          "$ref": "#/$defs/DocHit"
+        },
+        "type": "array"
+      },
+      "query": {
+        "type": "string"
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "codebase",
+      "query",
+      "hits"
+    ],
+    "type": "object"
+  },
+  "FunctionSummary": {
+    "additionalProperties": false,
+    "properties": {
+      "line": {
+        "type": "integer"
+      },
+      "name": {
+        "type": "string"
+      },
+      "signature": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "line",
+      "signature"
+    ],
+    "type": "object"
+  },
+  "Guideline": {
+    "$defs": {
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "end_line": {
+            "type": "integer"
+          },
+          "heading_path": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "heading_path",
+          "start_line",
+          "end_line"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "citation": {
+        "$ref": "#/$defs/Citation"
+      },
+      "matched_on": {
+        "enum": [
+          "mention",
+          "search"
+        ],
+        "type": "string"
+      },
+      "quote": {
+        "type": "string"
+      },
+      "stance": {
+        "enum": [
+          "forbids",
+          "encourages",
+          "related"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "stance",
+      "quote",
+      "citation",
+      "matched_on"
+    ],
+    "type": "object"
+  },
+  "Impact": {
+    "$defs": {
+      "Dependent": {
+        "additionalProperties": false,
+        "properties": {
+          "distance": {
+            "type": "integer"
+          },
+          "path": {
+            "items": {
+              "$ref": "#/$defs/PathStep"
+            },
+            "type": "array"
+          },
+          "symbol": {
+            "$ref": "#/$defs/SymbolRef"
+          }
+        },
+        "required": [
+          "symbol",
+          "distance",
+          "path"
+        ],
+        "type": "object"
+      },
+      "DocRef": {
+        "additionalProperties": false,
+        "properties": {
+          "end_line": {
+            "type": "integer"
+          },
+          "heading_path": {
+            "type": "string"
+          },
+          "mentions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "heading_path",
+          "start_line",
+          "end_line"
+        ],
+        "type": "object"
+      },
+      "LayerGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "dependents": {
+            "items": {
+              "$ref": "#/$defs/Dependent"
+            },
+            "type": "array"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "dependents"
+        ],
+        "type": "object"
+      },
+      "PathStep": {
+        "additionalProperties": false,
+        "properties": {
+          "edge": {
+            "enum": [
+              "CALLS",
+              "INHERITS",
+              "REFERENCES",
+              "IMPORTS"
+            ],
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "edge",
+          "to"
+        ],
+        "type": "object"
+      },
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "candidates": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SymbolRef"
+        },
+        "type": "array"
+      },
+      "codebase": {
+        "type": "string"
+      },
+      "docs": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/DocRef"
+        },
+        "type": "array"
+      },
+      "layers": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/LayerGroup"
+        },
+        "type": "array"
+      },
+      "max_depth": {
+        "type": "integer"
+      },
+      "symbol": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SymbolRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "total": {
+        "default": 0,
+        "type": "integer"
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "codebase",
+      "symbol",
+      "max_depth"
+    ],
+    "type": "object"
+  },
+  "ImpactSummary": {
+    "$defs": {
+      "LayerCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "layer",
+          "count"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "layers": {
+        "items": {
+          "$ref": "#/$defs/LayerCount"
+        },
+        "type": "array"
+      },
+      "total": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "total",
+      "layers"
+    ],
+    "type": "object"
+  },
+  "LayerCount": {
+    "additionalProperties": false,
+    "properties": {
+      "count": {
+        "type": "integer"
+      },
+      "layer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "layer",
+      "count"
+    ],
+    "type": "object"
+  },
+  "LayerGroup": {
+    "$defs": {
+      "Dependent": {
+        "additionalProperties": false,
+        "properties": {
+          "distance": {
+            "type": "integer"
+          },
+          "path": {
+            "items": {
+              "$ref": "#/$defs/PathStep"
+            },
+            "type": "array"
+          },
+          "symbol": {
+            "$ref": "#/$defs/SymbolRef"
+          }
+        },
+        "required": [
+          "symbol",
+          "distance",
+          "path"
+        ],
+        "type": "object"
+      },
+      "PathStep": {
+        "additionalProperties": false,
+        "properties": {
+          "edge": {
+            "enum": [
+              "CALLS",
+              "INHERITS",
+              "REFERENCES",
+              "IMPORTS"
+            ],
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "edge",
+          "to"
+        ],
+        "type": "object"
+      },
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "dependents": {
+        "items": {
+          "$ref": "#/$defs/Dependent"
+        },
+        "type": "array"
+      },
+      "layer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "layer",
+      "dependents"
+    ],
+    "type": "object"
+  },
+  "ModuleSummary": {
+    "$defs": {
+      "ClassSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "bases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "line",
+          "bases",
+          "methods"
+        ],
+        "type": "object"
+      },
+      "DocRef": {
+        "additionalProperties": false,
+        "properties": {
+          "end_line": {
+            "type": "integer"
+          },
+          "heading_path": {
+            "type": "string"
+          },
+          "mentions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "heading_path",
+          "start_line",
+          "end_line"
+        ],
+        "type": "object"
+      },
+      "FunctionSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "line",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "SymbolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "candidates": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/SymbolRef"
+        },
+        "type": "array"
+      },
+      "classes": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ClassSummary"
+        },
+        "type": "array"
+      },
+      "codebase": {
+        "type": "string"
+      },
+      "docs": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/DocRef"
+        },
+        "type": "array"
+      },
+      "docstring": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "functions": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/FunctionSummary"
+        },
+        "type": "array"
+      },
+      "imported_by": {
+        "default": 0,
+        "type": "integer"
+      },
+      "imports": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "module": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SymbolRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "codebase",
+      "module"
+    ],
+    "type": "object"
+  },
+  "PathStep": {
+    "additionalProperties": false,
+    "properties": {
+      "edge": {
+        "enum": [
+          "CALLS",
+          "INHERITS",
+          "REFERENCES",
+          "IMPORTS"
+        ],
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "edge",
+      "to"
+    ],
+    "type": "object"
+  },
+  "Symbol": {
+    "additionalProperties": false,
+    "properties": {
+      "docstring": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "domain": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "kind": {
+        "enum": [
+          "module",
+          "class",
+          "function"
+        ],
+        "type": "string"
+      },
+      "layer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "line": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "path": {
+        "type": "string"
+      },
+      "qualname": {
+        "type": "string"
+      },
+      "signature": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "qualname",
+      "kind",
+      "path"
+    ],
+    "type": "object"
+  },
+  "SymbolRef": {
+    "additionalProperties": false,
+    "properties": {
+      "domain": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "kind": {
+        "enum": [
+          "module",
+          "class",
+          "function"
+        ],
+        "type": "string"
+      },
+      "layer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "line": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "path": {
+        "type": "string"
+      },
+      "qualname": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "qualname",
+      "kind",
+      "path"
+    ],
+    "type": "object"
+  },
+  "SymbolSearch": {
+    "$defs": {
+      "Symbol": {
+        "additionalProperties": false,
+        "properties": {
+          "docstring": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "kind": {
+            "enum": [
+              "module",
+              "class",
+              "function"
+            ],
+            "type": "string"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "path": {
+            "type": "string"
+          },
+          "qualname": {
+            "type": "string"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "qualname",
+          "kind",
+          "path"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "codebase": {
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "module",
+          "class",
+          "function",
+          "any"
+        ],
+        "type": "string"
+      },
+      "query": {
+        "type": "string"
+      },
+      "symbols": {
+        "items": {
+          "$ref": "#/$defs/Symbol"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "codebase",
+      "query",
+      "kind",
+      "symbols"
+    ],
+    "type": "object"
+  }
+}

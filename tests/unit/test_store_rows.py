@@ -80,7 +80,8 @@ def test_edge_properties_keep_only_what_the_kind_uses_and_store_ref_kind_as_kind
     assert edge_properties(defines) == {}
 
 
-def test_validate_rejects_dangling_edges_duplicate_ids_and_foreign_nodes() -> None:
+def test_validate_rejects_batches_the_store_must_not_write() -> None:
+    codebase = CodebaseNode(id="c", codebase="c", name="c", root="/r", indexed_at="t")
     module = ModuleNode(id="c:m", codebase="c", qualname="m", path="m.py")
     function = FunctionNode(
         id="c:m.f",
@@ -94,17 +95,21 @@ def test_validate_rejects_dangling_edges_duplicate_ids_and_foreign_nodes() -> No
         is_method=False,
         is_async=False,
     )
-    good = GraphBatch(
-        codebase="c",
-        nodes=(module, function),
-        edges=(Edge(kind="DEFINES", source=module.id, target=function.id),),
-    )
-    validate(good)
+    defines = Edge(kind="DEFINES", source=module.id, target=function.id)
+    validate(GraphBatch(codebase="c", nodes=(codebase, module, function), edges=(defines,)))
 
-    with pytest.raises(ValueError, match="dangling"):
-        validate(GraphBatch(codebase="c", nodes=(module,), edges=good.edges))
-    with pytest.raises(ValueError, match="duplicate"):
-        validate(GraphBatch(codebase="c", nodes=(module, module)))
-    with pytest.raises(ValueError, match="codebase"):
-        other = ModuleNode(id="d:m", codebase="d", qualname="m", path="m.py")
-        validate(GraphBatch(codebase="c", nodes=(module, other)))
+    def rejected(nodes: tuple, edges: tuple = ()) -> str:
+        with pytest.raises(ValueError) as raised:
+            validate(GraphBatch(codebase="c", nodes=nodes, edges=edges))
+        return str(raised.value)
+
+    assert "dangling" in rejected((codebase, module), (defines,))
+    assert "duplicate" in rejected((codebase, module, module))
+    other = ModuleNode(id="d:m", codebase="d", qualname="m", path="m.py")
+    assert "another codebase" in rejected((codebase, module, other))
+    # Right codebase property, but an id from another codebase's space.
+    misplaced = ModuleNode(id="d:x", codebase="c", qualname="x", path="x.py")
+    assert "id prefix" in rejected((codebase, misplaced))
+    assert "one Codebase node" in rejected((module,))
+    wrong = CodebaseNode(id="d", codebase="c", name="d", root="/r", indexed_at="t")
+    assert "one Codebase node" in rejected((wrong, module))

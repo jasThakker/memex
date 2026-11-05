@@ -60,10 +60,30 @@ def test_stats_for_a_codebase_never_indexed_exits_1(
     assert "plainrepo is not indexed; run `memex index plainrepo`" in capsys.readouterr().err
 
 
-def test_an_unreachable_database_exits_1(
+@pytest.mark.usefixtures("neo4j_env")
+def test_a_wrong_password_exits_1_without_the_is_it_running_hint(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:1")  # nothing listens there
+    monkeypatch.setenv("NEO4J_PASSWORD", "wrong")
 
     assert main(["stats", "layered_app", "--config", CONFIG]) == 1
-    assert "cannot reach Neo4j at bolt://localhost:1" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "Neo4j rejected the credentials for user 'neo4j'" in error
+    assert "NEO4J_PASSWORD" in error
+    assert "is it running" not in error
+
+
+@pytest.mark.usefixtures("neo4j_env")
+def test_a_database_error_while_writing_exits_1_with_one_line(
+    driver: Driver, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Another codebase already holds an id the batch writes: the uniqueness constraint fails.
+    assert main(["index", "layered_app", "--config", CONFIG]) == 0
+    driver.execute_query("MATCH (n {codebase: 'layered_app'}) DETACH DELETE n")
+    driver.execute_query("CREATE (:Module {id: 'layered_app:app.main', codebase: 'squatter'})")
+    capsys.readouterr()
+
+    assert main(["index", "layered_app", "--config", CONFIG]) == 1
+    error = capsys.readouterr().err
+    assert error.startswith("memex: Neo4j error while writing layered_app:")
+    assert "Traceback" not in error

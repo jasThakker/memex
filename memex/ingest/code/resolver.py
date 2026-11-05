@@ -27,12 +27,14 @@ Inheritance rules (INHERITS, position is the base's 0-based index as written):
 Call rules (CALLS, DESIGN.md section 9), for call sites inside a function body, nested defs
 and lambdas included (not decorators or defaults):
 - A bare name defined or imported in the module, or imported inside the function: `exact`.
-- `self.m()`, `cls.m()`, `cls()`, `super().m()`, `C.m()` and `C(...).m()` where `C` is a class
-  in the codebase: the method on that class or its bases, depth first: `exact`.
+- `self.m()`, `cls.m()`, `cls()`, `super().m()`, `super(C, self).m()`, `C.m()` and `C(...).m()`
+  where `C` is a class in the codebase: the method on that class or its bases, depth first:
+  `exact`. `super()` inside a class nested in a method, or with no class node, is unresolved.
 - `alias.f()` or `alias.sub.f()` where `alias` is an imported module in the codebase: `exact`.
 - Otherwise, a name that only one function in the codebase has: `inferred`. Never for dunder
-  names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), or a bare name
-  bound inside the function (a parameter, variable or nested def).
+  names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), `super()` calls,
+  or a bare name bound inside the function or by the module (a parameter, variable, nested def,
+  module-level assignment, or an import the resolver cannot place).
 - Calling a class runs its `__init__`, found through its bases. A class with no `__init__` in
   the codebase gives no edge and is not unresolved.
 - A call rooted at a builtin, a literal or a name from outside the codebase gives no edge and
@@ -231,6 +233,8 @@ class _CallResolver:
         if head == _LOCAL:
             return _UNRESOLVED
         if head is None:
+            if name in self.imports or name in self.symbols.module_names(self.module):
+                return _UNRESOLVED  # bound, but not to anything the resolver can place
             return self._inferred(name)
         dotted, is_external = head
         return _EXTERNAL if is_external else self._target(dotted)
@@ -238,14 +242,8 @@ class _CallResolver:
     def _resolve_attribute_call(self, func: ast.Attribute) -> _Outcome:
         receiver, name = func.value, func.attr
         cls: str | None = None
-        if self._is_super(receiver) and self.cls is not None:
-            for base in self.symbols.bases(self.cls):
-                found = self.symbols.method(base, name)
-                if found is not None:
-                    return found, "exact"
-            if self.symbols.has_outside_base(self.cls) or hasattr(object, name):
-                return _EXTERNAL  # the method comes from a base outside the codebase
-            return _UNRESOLVED
+        if self._is_super(receiver):
+            return self._resolve_super(receiver, name)
         if isinstance(receiver, ast.Name) and receiver.id == self.active_receiver:
             cls = self.cls
         elif isinstance(receiver, ast.Call):  # C(...).m()
@@ -269,6 +267,27 @@ class _CallResolver:
         if self._root_is_external(receiver):
             return _EXTERNAL
         return self._inferred(name)
+
+    def _resolve_super(self, call: ast.Call, name: str) -> _Outcome:
+        """`super().m()` or `super(C, self).m()`: the bases of the method's class (or of C).
+
+        Inside a nested class, or outside any class node, the class is unknown: unresolved.
+        """
+        if self.cls is None or self.active_receiver is None:
+            return _UNRESOLVED
+        start = self.cls
+        if call.args:
+            explicit = self._dotted(call.args[0])
+            if explicit is None or explicit[1] or explicit[0] not in self.symbols.classes:
+                return _UNRESOLVED
+            start = explicit[0]
+        for base in self.symbols.bases(start):
+            found = self.symbols.method(base, name)
+            if found is not None:
+                return found, "exact"
+        if self.symbols.has_outside_base(start) or hasattr(object, name):
+            return _EXTERNAL  # the method comes from a base outside the codebase
+        return _UNRESOLVED
 
     def _head(self, name: str) -> tuple[str, bool] | str | None:
         """What a bare name in this function refers to: (dotted, is_external), _LOCAL or None."""
@@ -465,11 +484,34 @@ class SymbolTable:
         self.nodes = {node.qualname: node for module in modules for node in module.nodes}
         self._module_of = {node.qualname: module for module in modules for node in module.nodes}
         self._written_bases: dict[str, list[tuple[str, bool] | None]] = {}
+        self._module_names: dict[str, frozenset[str]] = {}
         self._class_attributes: dict[str, dict[str, str]] = {}
 
     def module_of(self, qualname: str) -> ParsedModule:
         """The parsed module a module, class or function node comes from."""
         return self._module_of[qualname]
+
+    def module_names(self, module: ParsedModule) -> frozenset[str]:
+        """Every name a module binds at module level: definitions, assignments, imports."""
+        qualname = module.source.qualname
+        if qualname not in self._module_names:
+            names = {name for raw in module.imports if raw.module_level for name in [binds(raw)]}
+            stack: list[ast.AST] = list(module.tree.body)
+            while stack:
+                node = stack.pop()
+                match node:
+                    case ast.Name(ctx=ast.Store()):
+                        names.add(node.id)
+                    case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef():
+                        names.add(node.name)
+                        continue  # its body is its own scope
+                    case ast.Lambda():
+                        continue
+                    case ast.ExceptHandler(name=str()):
+                        names.add(node.name)
+                stack.extend(ast.iter_child_nodes(node))
+            self._module_names[qualname] = frozenset(name for name in names if name)
+        return self._module_names[qualname]
 
     def class_attributes(self, cls: str) -> dict[str, str]:
         """String literals assigned directly in a class body: `__tablename__ = "users"`."""
@@ -508,8 +550,9 @@ class SymbolTable:
             found: list[tuple[str, bool] | None] = []
             for base in definition.bases if isinstance(definition, ast.ClassDef) else []:
                 resolved = self.resolve_expression(module, base)
-                if resolved == (cls, False) and isinstance(base, ast.Name):
-                    resolved = self._bound_before(module, base.id, self.definition_lines[cls])
+                named = base.value if isinstance(base, ast.Subscript) else base
+                if resolved == (cls, False) and isinstance(named, ast.Name):
+                    resolved = self._bound_before(module, named.id, self.definition_lines[cls])
                 found.append(resolved)
             self._written_bases[cls] = found
         return self._written_bases[cls]

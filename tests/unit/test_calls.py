@@ -481,3 +481,85 @@ def test_a_class_named_after_its_base_looks_up_methods_in_that_base() -> None:
     )
 
     assert calls(edges, "lib") == {("pkg.a.Base.run", "pkg.base.Base.save", "exact")}
+
+
+def test_super_in_a_local_class_is_never_resolved_through_the_outer_class() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                def helper(): ...
+
+                class Base:
+                    def save(self): ...
+
+                def make():
+                    class Local(Base):
+                        def run(self):
+                            super().helper()  # no class node: never inferred
+
+                class Outer(Base):
+                    def build(self):
+                        class Local:
+                            def save(self):
+                                super().save()  # Local's super, not Outer's
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 2
+
+
+def test_super_with_an_explicit_class_starts_after_that_class() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/a.py": """
+                class A:
+                    def m(self): ...
+
+                class B(A):
+                    def m(self): ...
+
+                class C(B):
+                    def m(self):
+                        super(B, self).m()
+                    def n(self):
+                        super(C, self).m()
+            """,
+        }
+    )
+
+    assert calls(edges, "lib") == {
+        ("pkg.a.C.m", "pkg.a.A.m", "exact"),
+        ("pkg.a.C.n", "pkg.a.B.m", "exact"),
+    }
+    assert unresolved == 0
+
+
+def test_a_name_the_module_binds_is_never_inferred() -> None:
+    # Bound, but not to a function the resolver can place: unresolved, not a guess.
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/compat.py": """
+                import json
+
+                dumps = json.dumps
+            """,
+            "pkg/other.py": "def dumps(): ...\ndef handler(): ...\n",
+            "pkg/use.py": """
+                from pkg.compat import dumps
+
+                handler = make_handler()
+
+                def f(data):
+                    dumps(data)
+                    handler()
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 2

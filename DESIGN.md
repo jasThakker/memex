@@ -144,7 +144,7 @@ class Extractor(Protocol):
 - Extractors only add edges between nodes that already exist, plus values for the class properties listed in `CLASS_PROPERTIES` (v1: `tablename`). They never create nodes or touch Neo4j.
 - The registry dict `EXTRACTORS` in `extractors/__init__.py` maps names to extractor classes; the `extractors` list in `memex.toml` picks which ones run. An unknown name is a config error raised by `index_code` before anything is read.
 
-**`sqlalchemy` (built in v1):** only calls that resolve to a name under `sqlalchemy` count, in assignments directly in a class body. `ForeignKey("users.id")` (also schema-qualified, or `ForeignKey(User.id)`) becomes a REFERENCES edge of kind `foreign_key` through the `__tablename__` lookup. `relationship(User)`, `relationship("User")`, a dotted string or `relationship(lambda: User)` becomes one of kind `relationship`. A string is resolved among mapped classes only (a class with a `__tablename__`, or one inheriting from such a class or from a `sqlalchemy` base), as the module binds it, then as a dotted name, then as a unique class name. An ambiguous or unknown target gives no edge. A class assigning a string to `__tablename__` gets the `tablename` property.
+**`sqlalchemy` (built in v1):** only calls that resolve to a name under `sqlalchemy` count, in assignments directly in a class body. `ForeignKey("users.id")` (also schema-qualified, or `ForeignKey(User.id)`) becomes a REFERENCES edge of kind `foreign_key` through the `__tablename__` lookup. `relationship(User)`, `relationship("User")`, a dotted string or `relationship(lambda: User)` becomes one of kind `relationship`. A string is resolved among mapped classes only (a class defining `__tablename__` as a string or a `@declared_attr` method, or one inheriting from such a class or from a `sqlalchemy` base), as the module binds it, then as a dotted name, then as a unique class name. An ambiguous or unknown target gives no edge. A class assigning a string to `__tablename__` gets the `tablename` property.
 
 **`django` (documented, not built):** `models.ForeignKey(User, ...)`, `OneToOneField` and `ManyToManyField`, including string refs like `"auth.User"`, would become REFERENCES with kind `foreign_key`, `one_to_one` or `many_to_many`; `Meta.db_table` feeds the same table lookup. Adding it means one new file, one registry line and a small Django-shaped fixture, with no core changes.
 
@@ -179,7 +179,7 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 - Uniqueness constraint on `id` for each label.
 - Index on `(codebase, name)` for Class, Function and External, and on `(codebase, qualname)` for Module, for symbol lookup.
 - Full-text index `doc_text` on `Doc(heading_path, text)`.
-- Re-index is per codebase and atomic: the batch is validated first (no duplicate ids, no dangling edges, no nodes of another codebase), then one write transaction deletes every node with that `codebase` and writes the batch with `UNWIND` in chunks of 1000. A failed re-index keeps the previous graph.
+- Re-index is per codebase and atomic: the batch is validated first (exactly one Codebase node for that codebase, every other id under the `{codebase}:` prefix, no duplicate ids, no dangling edges, no nodes of another codebase), then one write transaction deletes every node with that `codebase` and writes the batch with `UNWIND` in chunks of 1000. A failed re-index keeps the previous graph.
 - Properties set to None are not stored; the model's `Edge.ref_kind` is stored as the REFERENCES property `kind`.
 
 ## 8. Layer and domain classification
@@ -207,16 +207,16 @@ Best effort, with honest labels. Call sites count when they are inside a functio
 
 1. A name defined locally in the module: `exact`.
 2. An imported name (`from x import f`, at module level or inside the function): `exact`. Re-exports are followed, also to a name a codebase module re-exports from outside.
-3. `self.x`, `cls.x`, `cls()`, `super().x`, `C.x` and `C(...).x` where `C` is a class in the codebase: the class (for `super()`, its bases), then its in-codebase bases depth first: `exact`.
+3. `self.x`, `cls.x`, `cls()`, `super().x`, `super(C, self).x`, `C.x` and `C(...).x` where `C` is a class in the codebase: the class (for `super()`, the bases of the method's class or of `C`), then its in-codebase bases depth first: `exact`. `super()` inside a class nested in a method, or with no enclosing class node, is unresolved.
 4. `alias.x` or `alias.sub.x` where `alias` is an imported module: `exact`.
-5. Otherwise, a function or method name that is unique in the codebase: `inferred`. Never for dunder names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), a bare name bound inside the function, or a `super()` call.
+5. Otherwise, a function or method name that is unique in the codebase: `inferred`. Never for dunder names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), a `super()` call, or a bare name bound inside the function or by the module (an assignment, or an import the resolver cannot place).
 6. Otherwise, no edge. The unresolved count is recorded per codebase.
 
 - Calling a class runs its `__init__`, found through its bases. A class with no `__init__` in the codebase gives no edge and is not counted as unresolved.
 - A call rooted at a builtin, a literal or a name from outside the codebase (including `super()` reaching an outside base) is external: no edge, not counted.
 - Call sites with the same caller and callee share one edge: the first call site's line, `exact` over `inferred`.
 
-Base classes are resolved as the module binds them before the class binds its own name, so `class Base(Base)` inherits from the imported `Base`.
+Base classes are resolved as the module binds them before the class binds its own name, so `class Base(Base)` and `class Repo(Repo[int])` inherit from the imported class.
 
 Stretch: store 2 to 3 candidates as `ambiguous` edges, hidden by default and shown with `include_ambiguous=True`.
 
@@ -260,7 +260,7 @@ module_summary(codebase: str, module: str) -> ModuleSummary    # stretch
 ### check_change
 
 - `ChangeProposal`: `description: str`, `symbols: list[str] = []`. Explicit symbols are preferred; if empty, identifiers in the description are matched against the graph.
-- `ChangeCheck`: `resolved_symbols`, `unresolved`, `affected` (an `Impact` summary by layer), `guidelines: list[Guideline]`.
+- `ChangeCheck`: `resolved_symbols`, `ambiguous` (short names matching several symbols, each with its candidates, never guessed), `unresolved`, `affected` (an `Impact` summary by layer), `guidelines: list[Guideline]`.
 - `Guideline`: `stance` (`forbids`, `encourages`, `related`), `quote` (the sentence), `citation` (path, heading_path, start_line, end_line), `matched_on` (`mention`, `search`).
 
 Decision (ADR-002, written in Phase 6): check_change does not call an LLM. It retrieves candidate rules from docs that mention the affected symbols, modules or layers, plus a full-text search on the description, and assigns stance with transparent modal-verb rules (`never`, `do not`, `must not`, `avoid` give `forbids`; `must`, `should`, `always`, `prefer` give `encourages`). The calling agent makes the final judgment. This keeps the server deterministic, testable and cheap, and every claim carries a citation.

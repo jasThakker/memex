@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from neo4j import Driver
+from neo4j.exceptions import ConstraintError
 
 from memex.config import load_config
 from memex.graph.model import ClassNode, DocNode, Edge, GraphBatch, ModuleNode
@@ -117,6 +118,30 @@ def test_reindex_replaces_only_its_own_codebase(driver: Driver) -> None:
 
     assert stored_counts(driver, "layered_app") == expected_counts(smaller)
     assert stored_counts(driver, "plainrepo") == expected_counts(PLAIN)
+
+
+def test_a_failure_inside_the_transaction_keeps_the_previous_graph(driver: Driver) -> None:
+    # The first write stores layered_app without the orders model. Then a node of another
+    # codebase takes the id that model has, so the full re-index fails on the uniqueness
+    # constraint after it has already deleted the old nodes: the delete must roll back.
+    ensure_schema(driver)
+    orders = {
+        n.id
+        for n in LAYERED.nodes
+        if isinstance(n, ModuleNode | ClassNode) and n.path == "app/db/models/orders.py"
+    }
+    smaller = replace(
+        LAYERED,
+        nodes=tuple(n for n in LAYERED.nodes if n.id not in orders),
+        edges=tuple(e for e in LAYERED.edges if not {e.source, e.target} & orders),
+    )
+    replace_codebase(driver, smaller)
+    driver.execute_query("CREATE (:Module {id: $id, codebase: 'squatter'})", id=sorted(orders)[0])
+
+    with pytest.raises(ConstraintError):
+        replace_codebase(driver, LAYERED)
+
+    assert stored_counts(driver, "layered_app") == expected_counts(smaller)
 
 
 def test_a_rejected_batch_leaves_the_previous_graph_intact(driver: Driver) -> None:

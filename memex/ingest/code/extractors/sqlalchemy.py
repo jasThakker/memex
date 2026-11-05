@@ -8,7 +8,8 @@ In an assignment directly in a class body (`user_id = mapped_column(ForeignKey("
   `relationship(lambda: Model)` gives kind `relationship`. A string is looked up, as SQLAlchemy
   does, among mapped classes only: as the module binds it, then as a dotted class name, then
   as a mapped class name unique in the codebase. A class is mapped if it or an in-codebase
-  ancestor has a `__tablename__` or a base under `sqlalchemy`.
+  ancestor defines `__tablename__` (a string or a `@declared_attr` method) or has a base under
+  `sqlalchemy`.
 - `attr` is the assigned attribute, `line` the call's line. A target that cannot be placed, or
   is ambiguous, gives no edge.
 A class whose body assigns a string to `__tablename__` gets the `tablename` property.
@@ -155,10 +156,11 @@ def _relationship_target(
 
 
 def _is_mapped(cls: str, symbols: SymbolTable) -> bool:
-    """True if the class or an in-codebase ancestor has a `__tablename__` or a base under
-    `sqlalchemy` (such as `DeclarativeBase`)."""
+    """True if the class or an in-codebase ancestor has a `__tablename__` (a string, or a
+    method such as `@declared_attr def __tablename__`) or a base under `sqlalchemy`."""
     return any(
         "__tablename__" in symbols.class_attributes(ancestor)
+        or f"{ancestor}.__tablename__" in symbols.functions
         or any(
             resolved is not None and resolved[1] and resolved[0].startswith("sqlalchemy.")
             for resolved in symbols.written_bases(ancestor)
