@@ -1,0 +1,23 @@
+# Fixture codebases for unit tests. Paths are relative to this file (DESIGN.md section 5).
+
+[codebases.layered_app]            # generic layered web app, with layer and domain rules
+root = "layered_app"
+packages = ["app"]
+exclude = ["**/tests/**", "app/migrations/**"]
+extractors = ["sqlalchemy"]
+
+[codebases.layered_app.layers]
+"routes" = "routes"
+"services" = "services"
+"repos" = "repos"
+"db/models" = "db_models"
+"schema" = "schema"
+
+[codebases.layered_app.domains]
+strip_prefixes = ["repository_"]
+strip_suffixes = ["_services", "_service"]
+singularize = true
+
+[codebases.plainrepo]              # two packages, one under src/; no rules, no extractors
+root = "plainrepo"
+packages = ["src/toolkit", "reporter"]
