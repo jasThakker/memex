@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from memex.config import load_config
-from memex.graph.model import ClassNode, GraphBatch, ModuleNode
-from memex.ingest.code import index_code
+from memex.graph.model import ClassNode, DocNode, GraphBatch, ModuleNode
+from memex.ingest import index_codebase
 
 pytestmark = pytest.mark.realrepo
 
@@ -22,7 +22,7 @@ def batch() -> GraphBatch:
     codebase = load_config(REPO_ROOT / "memex.toml").get("httpx")
     assert codebase.root.is_dir(), "run `uv run python scripts/fetch_codebases.py` first"
     assert not codebase.layers and not codebase.extractors, "httpx must use defaults only"
-    return index_code(codebase)
+    return index_codebase(codebase)
 
 
 def test_parses_with_zero_errors(batch: GraphBatch) -> None:
@@ -71,3 +71,23 @@ def test_client_get_calls_client_request(batch: GraphBatch) -> None:
     }
 
     assert ("httpx:httpx._client.Client.request", "exact") in calls
+
+
+def test_readme_and_docs_are_indexed_with_the_default_kind(batch: GraphBatch) -> None:
+    docs = [node for node in batch.nodes if isinstance(node, DocNode)]
+    paths = {doc.path for doc in docs}
+
+    assert {"README.md", "docs/api.md", "docs/async.md"} <= paths
+    assert all(path == "README.md" or path.startswith("docs/") for path in paths)
+    assert {doc.kind for doc in docs} == {"doc"}  # httpx has no doc_kinds
+
+
+def test_an_api_heading_in_backticks_mentions_its_class(batch: GraphBatch) -> None:
+    # docs/api.md: "## `Client`"
+    mentions = {
+        (edge.target, edge.match)
+        for edge in batch.edges
+        if edge.kind == "MENTIONS" and edge.source == "httpx:doc:docs/api.md#Client"
+    }
+
+    assert ("httpx:httpx._client.Client", "backtick_name") in mentions

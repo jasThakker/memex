@@ -114,6 +114,19 @@ def test_a_missing_package_directory_exits_2(
     assert "package directory 'ghost' not found" in capsys.readouterr().err
 
 
+def test_a_docs_glob_matching_nothing_exits_2_before_the_database(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # `memex index` indexes docs too, so a docs typo fails before Neo4j is contacted.
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "__init__.py").write_text("")
+    config = tmp_path / "memex.toml"
+    config.write_text('[codebases.lib]\nroot = "."\npackages = ["lib"]\ndocs = ["READM.md"]\n')
+
+    assert main(["index", "lib", "--config", str(config)]) == 2
+    assert "docs glob 'READM.md' matches no Markdown files" in capsys.readouterr().err
+
+
 def test_an_unreachable_database_exits_1(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

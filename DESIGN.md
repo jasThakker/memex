@@ -81,6 +81,8 @@ Every codebase has a name, and every node carries a `codebase` property. Only `r
 
 Paths: `root` is relative to `memex.toml`; `exclude`, `docs` and `doc_kinds` globs are relative to `root`; `layers` keys are relative to each package directory. Optional keys default to "no rules" (empty lists and tables, no domain normalization). `source`, `ref` and `commit` are set together or not at all, and unknown keys are an error.
 
+Docs: `docs` globs match `.md` files only, and each file is read once. A glob that matches no Markdown file, or one outside `root`, is a config error. `exclude` applies to code only. A doc's kind is the label of the first `doc_kinds` glob, in table order, that matches its path; otherwise `doc`. A doc file that cannot be read or is not UTF-8 is recorded as a parse error and skipped.
+
 ```toml
 [codebases.httpx]                  # minimal entry: defaults only
 root = "vendor/httpx"
@@ -117,11 +119,14 @@ singularize = true
 "docs/docs/contributors/**" = "contributor"
 "docs/docs/documentation/**" = "user"
 
-[codebases.memex]                  # self-index: defaults only
+[codebases.memex]                  # self-index: no code rules, no extractors
 root = "."
 packages = ["memex"]
 exclude = ["tests/**", "vendor/**"]
 docs = ["README.md", "DESIGN.md", "CLAUDE.md", "docs/decisions/*.md"]
+
+[codebases.memex.doc_kinds]        # ADRs get their own kind
+"docs/decisions/*.md" = "adr"
 ```
 
 ## 6. Framework extractors
@@ -173,6 +178,17 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 | `INHERITS` | Class -> Class/External | position |
 | `REFERENCES` | Class -> Class | kind (`foreign_key`, `relationship`, ...), attr, line, extractor |
 | `MENTIONS` | Doc -> Module/Class/Function | match (`qualname`, `path`, `backtick_name`) |
+
+### Doc chunks and mentions
+
+- **Chunks.** A doc is split at every ATX heading and every setext heading. A setext heading is a paragraph underlined with `===` or `---`, unless one of its lines starts a list item, quote, table row or HTML (which starts or interrupts the paragraph); its text is the whole paragraph. A chunk runs to the next heading of any level. Headings are never read inside fenced code, indented code, HTML comments or YAML front matter at the top of the file. Text before the first heading is a chunk with an empty anchor and heading_path. Only `\n`, `\r\n` and `\r` end a line.
+- **Doc fields.** `anchor` is the heading's plain text: links reduced to their visible text; code span markers, emphasis markers and inline HTML dropped; whitespace collapsed. A heading repeated in one file gets ` (2)`, ` (3)` in its anchor only, so ids stay unique and match `path#Heading` references. `heading_path` joins the plain text of the enclosing headings and the chunk's own with ` > `. `text` is the body Markdown without the heading line. `start_line` is the heading's first line, and `end_line` the last non-blank line (1-based).
+- **MENTIONS.** Found lexically in a chunk's source lines, heading line included. Each chunk gets one edge per target, with its strongest match:
+  - `qualname`: a whole dotted name equal to a Module, Class or Function qualname, anywhere, code fences included.
+  - `path`: a root-relative path naming a module file (`pkg/mod.py`) or a package directory (`pkg/`, `pkg/sub/`). Globs and URLs never match.
+  - `backtick_name`: an inline code span, outside fences, holding a name, optionally followed by `()`. A bare name links only to the one Class or module-level Function with that name, never to a dunder, keyword, builtin or builtin type method name. Methods need the dotted form (`Class.method`), which links when exactly one Class or Function qualname ends with it.
+  - Modules are never matched by a bare or dotted name. An ambiguous or unknown name gives no edge.
+- The `Codebase` node's `parse_errors` counts code and doc files that failed; `files` counts code files.
 
 ### Neo4j setup
 
@@ -300,13 +316,14 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 
 - **`layered_app` fixture with known answers.** About 15 files of a generic layered web app, built to cover patterns common in real projects rather than any one repo: domain folders whose names differ by layer (`routes/users/` vs `services/user_services/`), a flat folder of per-domain files (`repos/repository_orders.py`), ORM models with `ForeignKey("users.id")` and `relationship("User")`, an underscore-private folder (`_base`), an injected attribute call (`self.repos.orders.get_one()`), a method name that is not unique, and an external base class. Tests assert exact node sets, edges and confidence labels.
 - **`plainrepo` fixture for generality.** Two packages, no rules, no extractors. Tests assert the default layer and domain behavior, and that no REFERENCES edges exist without an extractor enabled. The classifier is tested with and without rules on the same paths.
+- **Doc fixtures.** `tests/fixtures/docs/` holds chunker edge cases with known chunks and line ranges. The `layered_app` docs (an AGENTS.md, a guide and an ADR, each with its own kind) mention its symbols by qualname, path and backticks, next to near-misses that must not link: an ambiguous or common name, a glob, an excluded path, an unknown qualname. `plainrepo` has a README with no `doc_kinds`.
 - **Guardrail test** (default run): scans every file in the `memex/` package and fails if the name of any external codebase in `memex.toml` (one with a `source`, so `mealie` and `httpx` but not `memex`) appears in it, case-insensitive, including comments and docstrings.
 - **Unit tests** (no DB, default run, about 2 seconds; the fetch-script tests use real git and take most of it): parser, resolver, extractors, classifier, chunker, mention linker, store rows, CLI.
-- **Integration tests** (`-m neo4j`): store round-trip and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
+- **Integration tests** (`-m neo4j`): store round-trip (Doc nodes and MENTIONS included, plus the `doc_text` full-text index) and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
 - **MCP contract tests** (`-m neo4j`): the FastMCP in-memory client calls each tool and checks the schema, codebase validation, ambiguous-name handling and a size budget (JSON under 4 KB at default limits).
 - **Real-repo smoke tests** (`-m realrepo`, opt-in, need `vendor/` fetched). One test file per benchmark repo; the assertions are about that repo, the code under test is not.
-  - Mealie (rules + extractor): zero parse errors; `RecipeModel` present with layer `db_models`, domain `recipe` and incoming REFERENCES; `routes/households/*` classified as layer `routes`, domain `household`.
-  - httpx (defaults only): zero parse errors; `Client` and `AsyncClient` found by `find_symbol`; `Client.get` has `Client.request` among its callees; `_transports/asgi.py` gets layer `transports`, domain `asgi`; README and `docs/*.md` searchable; no REFERENCES edges.
+  - Mealie (rules + extractor): zero parse errors; `RecipeModel` present with layer `db_models`, domain `recipe` and incoming REFERENCES; `routes/households/*` classified as layer `routes`, domain `household`; the AGENTS.md rule against editing generated types is a Doc of kind `agents` that MENTIONS resolved symbols; every doc cited in `eval/questions.yaml` is a Doc id.
+  - httpx (defaults only): zero parse errors; `Client` and `AsyncClient` found by `find_symbol`; `Client.get` has `Client.request` among its callees; `_transports/asgi.py` gets layer `transports`, domain `asgi`; README and `docs/*.md` indexed with kind `doc`, and `` ## `Client` `` MENTIONS its class; no REFERENCES edges.
 - **Evaluation** runs outside pytest (section 14).
 
 ## 13. v1 limits
@@ -320,7 +337,18 @@ Stated openly:
 - An outside name re-exported through a star import of an outside module is not followed.
 - `sqlalchemy`: a `ForeignKey` inside a module-level `Table(...)` (an association table) has no class to start from and gives no edge.
 - Full re-index only; incremental indexing comes later.
-- Doc mentions are found lexically.
+- Doc mentions are found lexically; a bare word outside backticks never matches. A name inside a call written in backticks (`Depends(get_session)`) is not linked, and bare method names are not linked (section 7).
+- Backtick spans are found outside fences only: a span inside an HTML comment or indented code still links, and a fence opened inside an HTML comment hides the spans after it. A code span that wraps across lines is not linked.
+- The chunker reads only the block rules that decide headings:
+  - HTML blocks other than comments are not recognized, and any paragraph whose line starts with `<` counts as HTML (`<3 our users` underlined is no heading).
+  - Headings inside blockquotes or list items (`> ## Note`) are not detected.
+  - A file whose first line is a `---` rule is read as front matter up to the next `---`.
+- Anchors are reduced by pattern, not parsed:
+  - Brackets are dropped as shortcut links even without a link definition (`Optional[str]` gives `Optionalstr`).
+  - Angle brackets outside code are dropped as HTML (`<https://...>` and `Map<K, V>` vanish).
+  - A link URL containing `)` leaves a stray `)`, and emphasis markers that span a code span stay.
+  - `*args and **kwargs` loses markers, and backslash escapes and entities are kept as written.
+  - A heading with no plain text gets an empty anchor, or ` (2)` after a preamble.
 - Guideline stance comes from modal-verb rules, not semantic understanding.
 
 ## 14. Evaluation

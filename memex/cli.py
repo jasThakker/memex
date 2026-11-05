@@ -19,7 +19,7 @@ from neo4j.exceptions import AuthError, ConfigurationError, Neo4jError, ServiceU
 from memex.config import Codebase, ConfigError, Registry, UnknownCodebaseError, load_config
 from memex.graph.model import CodebaseNode, GraphBatch, ModuleNode
 from memex.graph.store import connect, ensure_schema, label_of, replace_codebase
-from memex.ingest.code import index_code
+from memex.ingest import index_codebase
 from memex.ingest.code.walker import WalkerError
 from memex.mcp.server import build_server
 from memex.query.codebases import codebase_stats
@@ -109,7 +109,7 @@ def format_stats(stats: CodebaseStats) -> str:
 
 def _index(codebase: Codebase) -> int:
     started = time.perf_counter()
-    batch = index_code(codebase)
+    batch = index_codebase(codebase)
     with connect() as driver:
         driver.verify_connectivity()  # fail fast instead of retrying for 30 s
         ensure_schema(driver)
