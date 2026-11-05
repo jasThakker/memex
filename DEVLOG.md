@@ -113,9 +113,11 @@ Template:
 - Possible post-v1 tool: "subclasses of X" (q01 showed `impact_of` mixes subclasses with other dependents).
 - Reviewer: Phase 2 is the first phase with core logic. Claude gives the exact reviewer prompt after the first parser slice and once at the end of the phase.
 
-## Phase 2: Parse + classify (in progress, started 2026-11-05)
+## Phase 2: Parse + classify (2026-11-05)
 
-**Approved plan** (branch `phase-2-parse`). If this session was cleared, continue from here.
+**Goal:** Turn any Python codebase into Module, Class and Function nodes with DEFINES and IMPORTS edges, External nodes and layer/domain labels, with no database. Prove it on fixtures with known answers and on Mealie and httpx.
+
+**Approved plan** (branch `phase-2-parse`, written before any code):
 
 Decisions:
 - `memex/graph/model.py`: one frozen dataclass per node label (`ModuleNode`, `ClassNode`, `FunctionNode`, `ExternalNode`, `DocNode`), `Node` is their union; one frozen `Edge(kind, source, target, line, confidence, names, position, ref_kind, attr, extractor, match)`; `GraphBatch(codebase, nodes, edges, stats)`. Written in full now because the schema freezes after Phase 3.
@@ -136,4 +138,49 @@ Slices:
 4. Classifier (`memex/ingest/code/classify.py`).
 5. Pipeline + real repos (`index_code` in `memex/ingest/code/__init__.py`, `-m realrepo` smoke tests for Mealie and httpx, layer/domain reports for the user), then reviewer run 2.
 
-Slice status: 0 (handoff), 1 (model + walker), 2 (parser) 3 (imports), 4 (classifier) and 5 (pipeline + real repos) done. Mealie: 415 files, 0 parse errors, 0 dropped duplicates; httpx: 23 files, same. Known imperfect labels in Mealie, documented rather than fixed (DESIGN section 8): `db/fixes/` gets domain `fixe` (singularize only drops `-s`; an `-es` rule would need its own exceptions such as `types`), and the meal plan concept is split across `meal_plan` (schema), `meal` (repos, from `repository_meals.py`) and `meal_plan_rule`. Reviewer run 2 done: 8 findings, all fixed except `__all__` being ignored by star re-exports (deferred; DESIGN is silent on `__all__`). Known limit: `try: from ._fast import x / except ImportError: from ._pure import x` with both modules walked resolves to the last binding. Carry to Phase 3: the "no REFERENCES without an extractor" tests (plainrepo, httpx) are trivially true until the extractor stage exists; check they still guard it. Domain rules normalize every domain, not only those in mapped layers. Reviewer run 1 done: 10 findings, all fixed except merged edges hiding a plain `import m` next to `from m import A` (cosmetic). Import resolution also follows re-exports through any module and through star imports, and merges names that reach the same target into one edge. DEFINES also covers Class -> Class (nested classes; DESIGN section 7 updated).
+Slices as built: (1) model + walker + both fixtures, (2) parser, (3) imports, then reviewer run 1 and its fixes, (4) classifier, (5) `index_code` pipeline + `-m realrepo` smoke tests, then reviewer run 2 and its fixes. One commit per step.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | Slices 1 to 3 against DESIGN sections 4, 5, 7, 12, 13 and this entry's decisions; focus on syntax cases, import edge cases, real-repo breakage, weak tests | 10 findings; about 52k subagent tokens, 2.7 minutes | 9 fixed in "Address reviewer run 1"; skipped: merged IMPORTS edges hide a plain `import m` next to `from m import A` (cosmetic) |
+| reviewer (run 2) | End of phase: run 1 fixes, classifier, pipeline, smoke tests against sections 4, 5, 7, 8, 12, 13 | 8 findings; about 67k subagent tokens, 2.7 minutes | 7 fixed in "Address reviewer run 2"; deferred: star re-exports ignore `__all__` |
+
+**What the reviewer caught that I and Claude had missed** (the case for a fresh-context reviewer): two nodes could get the same id (a `def utils()` in `pkg/__init__.py` next to `pkg/utils.py`, overlapping `packages` entries); `from .api import api` resolved to the submodule instead of the function; IMPORTS edges could point at nodes that were dropped as duplicates; a package could import itself; excluded internal modules became External nodes; `@overload` stubs hid the real implementation; several tests asserted too little to fail.
+
+**What went wrong:**
+- The `reviewer` agent was not available after `/clear`; the session had to be restarted (`claude --continue` kept the conversation) before it loaded.
+- The tests written for run 1 exposed a parser bug of Claude's own: definitions in `try` blocks came out of source order (`finally` before `except`).
+- One test (the deep-expression guard in the parser) was written after the code. Claude checked it by disabling the guard and watching the test fail.
+- Splitting slice 5 from the run 2 fixes into two commits needed a stash; the pop conflicted on `test_index.py` and was resolved from a backup, verified against the stash. Each of the two commits passes its tests on its own.
+- Early test files had long lines; the lint hook flagged them and they were fixed in visible edits.
+
+**What I changed (human edits and overrides):**
+- Approved DEFINES from Class to Class for nested classes (DESIGN section 7 updated).
+- Approved import resolution beyond the plan's wording: re-exports through any module, through star imports, and merged edges per target.
+- Approved that domain rules normalize every domain, not only those in mapped layers.
+- Decided to document the `fixe` label instead of adding an `-es` singularize rule.
+- Asked for reviewer fixes as separate commits, and for slice 5 and the run 2 fixes as two commits instead of one.
+- Questions I asked along the way: what a walker is, what "red" and "green" mean, what an ADR is (and that it is a development record, not a tool feature), and whether the reviewer shares this session's context (it does not: it sees only its prompt and the repo, and returns only its report).
+
+**Known limits and imperfect labels** (documented, not fixed):
+- Mealie: `db/fixes/` gets domain `fixe` (singularize only drops `-s`; an `-es` rule would need its own exceptions such as `types`). The meal plan concept is split across `meal_plan` (schema), `meal` (repos, from `repository_meals.py`) and `meal_plan_rule`.
+- `try: from ._fast import x / except ImportError: from ._pure import x` with both modules walked resolves to the last binding.
+- Star re-exports ignore `__all__`.
+- Files and folders whose names are not Python identifiers are not walked (they cannot be imported as modules).
+
+**Decisions / ADRs:** No ADR yet; the schema is still open until the end of Phase 3. Added to `graph/model.py` during the phase: `CodebaseNode` (with a `codebase` property) and `IndexStats.dropped_duplicates`.
+
+**Numbers:**
+- 8 commits on `phase-2-parse` (7 slice or fix commits plus the plan); 115 unit tests in about 2 s; 10 real-repo smoke tests in about 1 s.
+- Mealie: 415 modules, 709 classes, 1,721 functions, 345 externals; 2,430 DEFINES and 4,580 IMPORTS edges; 0 parse errors, 0 duplicates, 0 dangling edges.
+- httpx (defaults only): 23 modules, 87 classes, 429 functions, 79 externals; 516 DEFINES and 314 IMPORTS edges; 0 parse errors.
+- Memex self-index: 10 modules, 0 parse errors.
+- Reviewer: 2 runs, about 119k subagent tokens in total.
+
+**Next:**
+- Merge `phase-2-parse` into `main` with `--no-ff`; Phase 3 starts by creating `phase-3-resolve` from `main`.
+- Phase 3 (resolve + extract + store, DESIGN.md section 15): CALLS with confidence labels and INHERITS in the resolver; the `Extractor` Protocol and the `sqlalchemy` extractor; the Neo4j store; `memex index` and `memex stats`; ADR-001 to freeze the schema.
+- Open questions for the Phase 3 plan: whether the resolver's `_Index` becomes the `SymbolTable` of DESIGN section 6; how call resolution uses `RawImport.alias` and `module_level`; where INHERITS Externals merge with import Externals; how `CodebaseNode`, `indexed_at` and `IndexStats` reach Neo4j; batch size for `UNWIND` writes; how `memex stats` prints the layer/domain report (the Phase 2 report came from a throwaway script, not from `memex/`); which slice groups get a reviewer run.
+- Carry to Phase 3: the "no REFERENCES without an extractor" tests (plainrepo, httpx) are trivially true until the extractor stage exists; check they still guard it. Fill `IndexStats.unresolved_calls`. Add the remaining section 12 smoke assertions (REFERENCES into `RecipeModel`, `Client.get` calls `Client.request`).
+- No subagent to run before Phase 3. The reviewer runs inside Phase 3 after the slice groups its plan names; Claude gives the exact prompt each time.
