@@ -1,0 +1,42 @@
+# Registry of codebases Memex can index. Path rules and defaults: DESIGN.md section 5.
+
+[codebases.httpx]                  # minimal entry: defaults only
+root = "vendor/httpx"
+source = "https://github.com/encode/httpx"
+ref = "0.28.1"
+commit = "26d48e0634e6ee9cdc0533996db289ce4b430177"
+packages = ["httpx"]
+docs = ["README.md", "docs/*.md"]
+
+[codebases.mealie]                 # entry with rules and an extractor
+root = "vendor/mealie"
+source = "https://github.com/mealie-recipes/mealie"
+ref = "v3.30.0"
+commit = "9552df62118224a377d9c9b0a62706a62220ab86"
+packages = ["mealie"]
+exclude = ["mealie/alembic/**", "**/tests/**", "frontend/**"]
+docs = ["AGENTS.md", "docs/docs/contributors/**/*.md", "docs/docs/documentation/**/*.md"]
+extractors = ["sqlalchemy"]
+
+[codebases.mealie.layers]          # folder path under the package -> layer label
+"routes" = "routes"
+"services" = "services"
+"repos" = "repos"
+"db/models" = "db_models"
+"schema" = "schema"
+
+[codebases.mealie.domains]         # domain name normalization
+strip_prefixes = ["repository_", "controller_"]
+strip_suffixes = ["_services", "_service"]
+singularize = true
+
+[codebases.mealie.doc_kinds]       # docs glob -> label stored on Doc nodes
+"AGENTS.md" = "agents"
+"docs/docs/contributors/**" = "contributor"
+"docs/docs/documentation/**" = "user"
+
+[codebases.memex]                  # self-index: defaults only
+root = "."
+packages = ["memex"]
+exclude = ["tests/**", "vendor/**"]
+docs = ["README.md", "DESIGN.md", "CLAUDE.md", "docs/decisions/*.md"]
