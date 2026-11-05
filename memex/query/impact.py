@@ -60,14 +60,39 @@ def impact_of(
     if ref is None:
         return impact
 
-    rows, _, _ = driver.execute_query(
-        _START_SET, id=code_id(codebase, ref.qualname), routing_=RoutingControl.READ
+    symbol_id = code_id(codebase, ref.qualname)
+    distance, found = walk(driver, start_set(driver, symbol_id), max_depth)
+    docs, docs_cut = _docs(driver, codebase, symbol_id, distance)
+    return impact.model_copy(
+        update={
+            "total": len(found),
+            "layers": _by_layer(found[:limit]),
+            "docs": docs,
+            "truncated": truncated or len(found) > limit or docs_cut,
+        }
     )
-    distance: dict[str, int] = {row["id"]: 0 for row in rows}
+
+
+def start_set(driver: Driver, node_id: str) -> list[str]:
+    """The ids of a Module, Class or Function and of everything it DEFINES, transitively."""
+    rows, _, _ = driver.execute_query(_START_SET, id=node_id, routing_=RoutingControl.READ)
+    return [row["id"] for row in rows]
+
+
+def walk(
+    driver: Driver, start_ids: list[str], max_depth: int
+) -> tuple[dict[str, int], list[Dependent]]:
+    """(distance of every id reached, the start ids at 0; the dependents in the order found)
+
+    Breadth first over IMPACT_EDGES backwards, each node once at its shortest distance, with
+    its edge path back to the start set. Modules are leaves."""
+    distance: dict[str, int] = dict.fromkeys(start_ids, 0)
     paths: dict[str, list[PathStep]] = {}
     found: list[Dependent] = []
     frontier = list(distance)
     for step in range(1, max_depth + 1):
+        if not frontier:
+            break
         rows, _, _ = driver.execute_query(
             _STEP, ids=frontier, edges=IMPACT_EDGES, routing_=RoutingControl.READ
         )
@@ -88,18 +113,7 @@ def impact_of(
             )
             if row["label"] != "Module":
                 frontier.append(row["id"])
-        if not frontier:
-            break
-
-    docs, docs_cut = _docs(driver, codebase, code_id(codebase, ref.qualname), distance)
-    return impact.model_copy(
-        update={
-            "total": len(found),
-            "layers": _by_layer(found[:limit]),
-            "docs": docs,
-            "truncated": truncated or len(found) > limit or docs_cut,
-        }
-    )
+    return distance, found
 
 
 def _by_layer(dependents: list[Dependent]) -> list[LayerGroup]:

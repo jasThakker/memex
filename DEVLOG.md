@@ -394,3 +394,70 @@ Slices: (1) list_codebases + scope check, (2) resolve_symbol + find_symbol, (3) 
 - Open questions for the Phase 6 plan: how identifiers are pulled from a description without matching common words (reuse `resolve_symbol` and its candidates for `AmbiguousName`); how a Doc section is split into sentences for `quote`; negation in the modal-verb rules ("you don't need to avoid"); combining MENTIONS with full-text search, since names inside call spans are not linked (q09); whether `affected` reuses the `impact_of` walk through a shared helper; the size budget for `ChangeCheck`; ADR-002.
 - Carry to Phase 7: measure in the eval how often the call-graph gaps cost an answer (shared method names, untyped locals like httpx `request()`) before adding the `ambiguous` tier or local typing.
 - No subagent to run before Phase 6. The reviewer runs inside Phase 6 after the slice groups its plan names; Claude gives the exact prompt each time.
+
+## Phase 6: check_change (2026-11-05)
+
+**Goal:** Build `check_change(codebase, proposal)`: before making a change, an agent learns which code it affects and which documented rules apply, each quoted as one sentence with a stance and a citation to its own lines. No LLM in the server (ADR-002). Built on `phase-6-check-change` from `main`.
+
+**Approved plan** (written in plan mode before any code; `/Users/jasthakker/.claude/plans/start-phase-6-lucky-piglet.md`):
+
+Decisions (the open questions from Phase 5's "Next"):
+- Names from a description: only code-shaped tokens (backtick spans, dotted, `snake_case`, `CamelCase`), resolved with the existing `resolve_symbol`; several matches become `AmbiguousName`, never a guess.
+- `affected` reuses the `impact_of` walk through shared `start_set` and `walk` helpers, with no change in `impact_of`'s behavior.
+- Two guideline sources: doc sections that MENTION the walked code, and a full-text search on the description (which also covers names inside call spans, which are not linked).
+- Sentences come from a small splitter in a new pure module, `memex/query/rules.py`; a citation is the sentence's own line range, not the whole section.
+- Stance from modal verbs, a negated requirement first ("you don't need to" gives `related`), then forbids, then encourages.
+- Keep the 4 KB budget and lower caps where needed, as in Phase 5. The frozen contract models are unchanged.
+
+Slices: (1) rules (tokens, sentences, stance), (2) resolution and `affected`, (3) mention guidelines, (4) search guidelines and merging, then reviewer run 1, (5) the MCP tool, (6) Mealie and httpx proposals, ADR-002, DESIGN and README, then reviewer run 2. Built as planned, with one fix commit after each reviewer run.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | Slices 1 to 4 against DESIGN sections 4, 7, 9, 10, 13 and plan decisions 2 to 9; focus on sentence lines, stance, tokens, guideline selection and ranking, the impact refactor, the size budget, weak tests | 3 high, 8 medium and 5 low findings plus weak tests; about 74k subagent tokens, 4.7 minutes | Fixed all but 9 (size, deferred to slice 5 and 6 as planned) and parts of 10 and 16, in "Address reviewer run 1"; documented 14, the rest of 10 and 16, and the fence-only mention fallback in DESIGN section 13 |
+| reviewer (run 2) | End of phase: run 1 fixes and slices 5 and 6 against DESIGN sections 4, 10 to 13, ADR-002 and plan decisions 2 to 10; the shared candidate cap, the MCP wrapper, the size budget on Mealie, the guardrail | 3 high, 7 medium and 5 low findings, run 1 fixes confirmed with no regressions; about 91k subagent tokens, 5.1 minutes | Fixed all but the list-indented fence part of 8 and 13, in "Address reviewer run 2"; documented those two in DESIGN section 13 |
+
+**What the reviewer caught that Claude had missed:**
+- Run 1: two sentences on one line shared a dedup key, so the second was silently dropped; `must **not**` read as `encourages`; rules about a changed symbol's own module or folder were never found by mention, although DESIGN promised layers; the 2-per-section cap held per source, not per section; a short name used as an English word (`create`) counted as naming a symbol.
+- Run 1, also: sentences after `**Never**`, pipe-less tables, file names and acronym plurals as tokens, names inside call spans in the description.
+- Run 1, tests: synthetic doc line ranges used the same formula the code inverts, so they could not fail; the dedup test passed even if search found nothing; `in` checks hid extra sentences.
+- Run 2: the file-name filter skipped backtick spans; explicit symbols had no length limit (one of 5,000 characters gave a 5,145 B result); DESIGN said "sentences with a stance come first" while the 6-guideline cut kept section order, so a `forbids` could be pushed out by `related` noise; an ambiguous name could keep exactly one candidate, which reads as a resolution; 10 resolved explicit symbols on Mealie came to 4,131 B.
+- Run 2, also: sentences ending inside emphasis or quotes, fences inside blockquotes, an enclosing package that also imports the symbol ranked as a dependent, a method change missed rules on its class, and a real-repo test that passed for the wrong reason.
+- Claude reproduced the high and medium findings of both runs (pure functions directly, sizes on the dev database) before the decision; all reproduced. Run 2's reviewer could not run scripts, so its sizes were estimates; Claude measured them.
+
+**What went wrong:**
+- Slice 1 dropped the plan's "a sentence may start with a code span" while handling `e.g.`; the slice 3 integration test exposed it, and a unit test was added and shown red first.
+- In the run 1 fixes, the heading-only quote test passed before the fix (its text split into short sentences); Claude made it one long sentence and saw it fail. Claude also changed an expected `truncated` to `True` that the fix then showed was wrong, and put it back.
+- The new table mode first read a list item after a table as a table row; the existing fixture caught it.
+- The plan's size check came late: slice 6 measured 9.9 KB on Mealie for ten shared short names, far over budget. I chose a shared candidate cap; reviewer run 2 then found two more inputs over budget.
+- Small slips caught before review: test constants defined below the `parametrize` that used them, a stray `if False` in an expected list, and an unneeded rename of test ids, reverted.
+- Edits made through scripts bypassed the hook, so Claude ran ruff and regenerated the HTML views by hand, as in earlier phases.
+- A usage limit paused the session between finishing slice 6 and its commit; work resumed from the conversation without loss.
+
+**What I changed (human edits and overrides):**
+- Approved the plan, including sentence-level citations and the pure `rules.py` module.
+- Chose the shared candidate cap (3 per name, 8 in total, names past it listed with no candidates) over fewer names or documenting the overflow.
+- Accepted Claude's fix, document or defer split for both reviewer runs, including counting enclosing classes in run 2, one level beyond the run 1 wording.
+- Questions I asked along the way: how many slices the phase has (asked twice), whether I should just paste the reviewer run 2 prompt, whether only one phase is left after this one (Phase 7 is the last required one; 8 and 9 are optional), and to pick up after the usage limit reset.
+
+**Known limits** (documented in DESIGN section 13, not fixed):
+- Stance comes from modal verbs only: a rule phrased without one is `related`, and a sentence with both a requirement and a prohibition is `forbids`.
+- Search matching counts any shared word of four letters or more outside a short stopword list, so generic words pick sentences: "a new service" on Mealie also quotes the security doc's "Denial of Service" sentences.
+- HTML comments, indented code and fences indented four spaces or more in a list item are read as prose; a call span in a doc sentence (`Depends(get_session)`) does not name its argument; brand names in a description become unresolved tokens.
+- The 4 KB budget is measured, not bounded: the largest Mealie case is 3,949 B.
+
+**Decisions / ADRs:** ADR-002, check_change without an LLM. `graph/model.py` and `query/models.py` are unchanged, so no ADR-001 change. DESIGN sections 10 to 13 and the README updated to the code as built.
+
+**Numbers:**
+- 9 commits on `phase-6-check-change` (6 slice commits, 2 reviewer fix commits, this entry); about 1.4 hours of work from the Phase 5 merge to the last fix commit, not counting the usage-limit pause, against an estimate of 1.5 hours.
+- Tests: 343 unit in about 3 s; 186 Neo4j in about 30 s (container included); 33 real-repo tool tests and 17 real-repo batch smoke tests.
+- check_change on Mealie, wire JSON at default caps: 1,099 B (`RecipeModel`), 1,579 B (AppSettings proposal), 2,125 B (locales), 2,085 B (pip), 2,291 B (`AllRepositories`), 3,669 B (ten explicit symbols), 3,865 B (eight shared short names), 3,949 B (seven shared names and `AppSettings`).
+- The three hand-written Mealie proposals each cite the expected AGENTS.md line: 121 (`forbids`, by mention), 144 (`forbids`, by search), 100 (`encourages`, by search).
+- Reviewer: 2 runs, about 165k subagent tokens in total.
+
+**Next:**
+- Optional before the merge: a live check in a fresh Claude Code session (re-index Mealie first with `uv run memex index mealie`), for example "In mealie, I want to instantiate AppSettings directly in a new service. Is that allowed?", and confirm the citation points at the quoted line.
+- Merge `phase-6-check-change` into `main` with `--no-ff` (keep the branch).
+- Phase 7 (evaluation, DESIGN sections 14 and 15) on `phase-7-eval` from `main`: `eval/run.py`, `eval/grade.py`, the 12 questions in two conditions.
+- Carry to Phase 7: measure whether q11 and q12 (check_change) are answered from the cited guidelines; whether generic-word search noise costs answers; whether the call-graph gaps from Phase 5 and the call-span gap (q09) cost answers, before widening any rule.
+- No subagent to run before Phase 7. The reviewer runs inside Phase 7 after the slice groups its plan names; Claude gives the exact prompt each time.

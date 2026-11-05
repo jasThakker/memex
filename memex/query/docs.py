@@ -9,6 +9,7 @@ result echoes the query).
 """
 
 import re
+from typing import Any
 
 from neo4j import Driver, RoutingControl
 
@@ -41,15 +42,7 @@ def search_docs(driver: Driver, codebase: str, query: str, limit: int = 5) -> Do
         raise ValueError(f"query must be at most {MAX_QUERY_CHARS} characters, got {len(text)}")
     check_limit(limit)
     result = DocSearch(codebase=codebase, query=query, hits=[])
-    if not _TERM.search(text):  # only punctuation: nothing to search for
-        return result
-    rows, _, _ = driver.execute_query(
-        _SEARCH,
-        query=escape_query(text),
-        codebase=codebase,
-        fetch=limit + 1,
-        routing_=RoutingControl.READ,
-    )
+    rows = search_sections(driver, codebase, text, limit + 1)
     hits = [
         DocHit(
             path=row["props"]["path"],
@@ -64,6 +57,22 @@ def search_docs(driver: Driver, codebase: str, query: str, limit: int = 5) -> Do
         for row in rows
     ]
     return result.model_copy(update={"hits": hits[:limit], "truncated": len(hits) > limit})
+
+
+def search_sections(driver: Driver, codebase: str, text: str, fetch: int) -> list[dict[str, Any]]:
+    """The best `fetch` doc sections for plain `text`, by score: each row has the node's
+    `props` (text included), its `score` and the qualnames it `mentions`. Text with no word
+    finds nothing."""
+    if not _TERM.search(text):  # only punctuation: nothing to search for
+        return []
+    rows, _, _ = driver.execute_query(
+        _SEARCH,
+        query=escape_query(text),
+        codebase=codebase,
+        fetch=fetch,
+        routing_=RoutingControl.READ,
+    )
+    return [dict(row) for row in rows]
 
 
 def escape_query(text: str) -> str:

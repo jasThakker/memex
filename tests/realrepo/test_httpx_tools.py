@@ -18,7 +18,7 @@ from memex.config import load_config
 from memex.graph.store import ensure_schema, replace_codebase
 from memex.ingest import index_codebase
 from memex.mcp.server import build_server
-from memex.query.models import CallGraph, DocSearch, Impact, SymbolSearch
+from memex.query.models import CallGraph, ChangeCheck, DocSearch, Impact, SymbolSearch
 
 pytestmark = [pytest.mark.neo4j, pytest.mark.realrepo]
 
@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = load_config(REPO_ROOT / "memex.toml")
 SIZE_BUDGET = 4096
 CLIENT = "httpx._client.Client"
+RETRY = "Make `Client.request` retry on connection timeouts."
 
 
 @pytest.fixture(scope="module")
@@ -95,6 +96,7 @@ def test_the_readme_and_docs_are_searchable(server: FastMCP) -> None:
         ("callees", {"codebase": "httpx", "symbol": "Client.send"}),
         ("impact_of", {"codebase": "httpx", "symbol": CLIENT}),
         ("search_docs", {"codebase": "httpx", "query": "timeout"}),
+        ("check_change", {"codebase": "httpx", "proposal": {"description": RETRY}}),
     ],
 )
 def test_results_fit_the_size_budget_at_default_limits(
@@ -103,3 +105,12 @@ def test_results_fit_the_size_budget_at_default_limits(
     (text,) = call(server, name, args).content
 
     assert len(text.text.encode()) < SIZE_BUDGET
+
+
+def test_check_change_works_with_defaults_only(server: FastMCP) -> None:
+    result = call(server, "check_change", {"codebase": "httpx", "proposal": {"description": RETRY}})
+    checked = ChangeCheck.model_validate(result.structured_content)
+
+    assert [ref.qualname for ref in checked.resolved_symbols] == [f"{CLIENT}.request"]
+    assert checked.affected.total > 0
+    assert {layer.layer for layer in checked.affected.layers} <= {"root", "transports", None}

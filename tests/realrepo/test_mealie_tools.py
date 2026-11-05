@@ -18,7 +18,15 @@ from memex.config import load_config
 from memex.graph.store import ensure_schema, replace_codebase
 from memex.ingest import index_codebase
 from memex.mcp.server import build_server
-from memex.query.models import CallGraph, DocSearch, Impact, SymbolSearch
+from memex.query.models import (
+    CallGraph,
+    ChangeCheck,
+    Citation,
+    DocSearch,
+    Guideline,
+    Impact,
+    SymbolSearch,
+)
 
 pytestmark = [pytest.mark.neo4j, pytest.mark.realrepo]
 
@@ -26,6 +34,31 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = load_config(REPO_ROOT / "memex.toml")
 SIZE_BUDGET = 4096
 RECIPE_MODEL = "mealie.db.models.recipe.recipe.RecipeModel"
+
+# check_change on three hand-written proposals (not the eval's q11 and q12), each checked by
+# hand against vendor/mealie/AGENTS.md before the test was written.
+GUIDE = "Mealie Development Guide for AI Agents > Critical Development Practices"
+APP_SETTINGS = "Instantiate `AppSettings()` directly in a new service to read the base URL."
+LOCALES = "Add a German translation by editing the de-DE locale files."
+PIP = "Run the backend tests with pip and python directly."
+# Ten distinct classes and functions, named explicitly: the most resolved symbols at once.
+TEN = [
+    "AppSettings",
+    "RecipeModel",
+    "AllRepositories",
+    "RecipeService",
+    "get_app_settings",
+    "GroupAIProviderController",
+    "OpenAIService",
+    "IngredientParserController",
+    "RegisteredParser",
+    "ABCIngredientParser",
+]
+# Ten short names shared by several classes: the largest result a description can ask for.
+MANY_NAMES = (
+    "Change `get_one`, `create`, `update`, `delete`, `__init__`, `get_all`, `get`, `save`, "
+    "`run` and `validate`."
+)
 
 
 @pytest.fixture(scope="module")
@@ -105,6 +138,21 @@ def test_find_symbol_puts_the_class_first(server: FastMCP) -> None:
         ("impact_of", {"codebase": "mealie", "symbol": "RecipeModel"}),
         ("impact_of", {"codebase": "mealie", "symbol": "AllRepositories"}),
         ("search_docs", {"codebase": "mealie", "query": "database migration alembic"}),
+        ("check_change", {"codebase": "mealie", "proposal": {"description": APP_SETTINGS}}),
+        ("check_change", {"codebase": "mealie", "proposal": {"description": LOCALES}}),
+        ("check_change", {"codebase": "mealie", "proposal": {"description": PIP}}),
+        ("check_change", {"codebase": "mealie", "proposal": {"description": MANY_NAMES}}),
+        (
+            "check_change",
+            {
+                "codebase": "mealie",
+                "proposal": {"description": "Refactor it.", "symbols": ["AllRepositories"]},
+            },
+        ),
+        (
+            "check_change",
+            {"codebase": "mealie", "proposal": {"description": "Refactor.", "symbols": TEN}},
+        ),
     ],
 )
 def test_results_fit_the_size_budget_at_default_limits(
@@ -113,3 +161,70 @@ def test_results_fit_the_size_budget_at_default_limits(
     (text,) = call(server, name, args).content
 
     assert len(text.text.encode()) < SIZE_BUDGET
+
+
+def check(server: FastMCP, description: str) -> ChangeCheck:
+    proposal = {"description": description}
+    result = call(server, "check_change", {"codebase": "mealie", "proposal": proposal})
+    return ChangeCheck.model_validate(result.structured_content)
+
+
+def cited(checked: ChangeCheck) -> list[tuple[str, str, int, int, str]]:
+    return [
+        (g.stance, g.citation.path, g.citation.start_line, g.citation.end_line, g.matched_on)
+        for g in checked.guidelines
+    ]
+
+
+def test_instantiating_app_settings_is_forbidden_by_a_mention(server: FastMCP) -> None:
+    checked = check(server, APP_SETTINGS)
+
+    assert [ref.qualname for ref in checked.resolved_symbols] == [
+        "mealie.core.settings.settings.AppSettings"
+    ]
+    assert checked.guidelines[0] == Guideline(
+        stance="forbids",
+        quote="Never instantiate `AppSettings()` directly",
+        citation=Citation(
+            path="AGENTS.md",
+            heading_path=f"{GUIDE} > Python Backend",
+            start_line=121,
+            end_line=121,
+        ),
+        matched_on="mention",
+    )
+
+
+def test_editing_another_locale_is_forbidden_by_search(server: FastMCP) -> None:
+    checked = check(server, LOCALES)
+
+    assert checked.resolved_symbols == []
+    assert ("forbids", "AGENTS.md", 144, 144, "search") in cited(checked)
+    rule = next(g for g in checked.guidelines if g.citation.start_line == 144)
+    assert rule.citation.heading_path == f"{GUIDE} > Frontend"
+    assert "en-US" in rule.quote
+
+
+def test_running_python_through_uv_is_encouraged_by_search(server: FastMCP) -> None:
+    checked = check(server, PIP)
+
+    assert checked.guidelines[0] == Guideline(
+        stance="encourages",
+        quote="**Always use `uv` for Python commands** (not `python` or `pip`):",
+        citation=Citation(
+            path="AGENTS.md",
+            heading_path=f"{GUIDE} > Python Backend",
+            start_line=100,
+            end_line=100,
+        ),
+        matched_on="search",
+    )
+
+
+def test_many_ambiguous_names_share_the_candidate_cap(server: FastMCP) -> None:
+    checked = check(server, MANY_NAMES)
+
+    counts = [len(a.candidates) for a in checked.ambiguous]
+    assert all(count in (0, 2, 3) for count in counts)  # never a single candidate
+    assert sum(counts) <= 8
+    assert counts[-1] == 0  # past the total: listed, with no candidates

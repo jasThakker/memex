@@ -19,8 +19,16 @@ from memex.graph.model import DocNode, Edge, code_id, doc_id
 from memex.graph.store import ensure_schema, replace_codebase
 from memex.ingest.code import index_code
 from memex.mcp.server import build_server
-from memex.query import calls, codebases, docs, impact, symbols
-from memex.query.models import CallGraph, CodebaseList, DocSearch, Impact, SymbolSearch
+from memex.query import calls, change, codebases, docs, impact, symbols
+from memex.query.models import (
+    CallGraph,
+    ChangeCheck,
+    ChangeProposal,
+    CodebaseList,
+    DocSearch,
+    Impact,
+    SymbolSearch,
+)
 
 pytestmark = pytest.mark.neo4j
 
@@ -35,7 +43,10 @@ TOOLS: dict[str, type[BaseModel]] = {
     "callees": CallGraph,
     "impact_of": Impact,
     "search_docs": DocSearch,
+    "check_change": ChangeCheck,
 }
+# Several names, two of them ambiguous: the largest check_change the fixture can give.
+MANY_NAMES = "Change `get_one`, `__init__`, `get`, `BaseService` and `UserRepository` for services."
 # One call per tool at its default limits, and the query function it must match exactly.
 CALLS: list[tuple[str, dict[str, Any], Any]] = [
     ("list_codebases", {}, lambda d: codebases.list_codebases(d, REGISTRY)),
@@ -63,6 +74,18 @@ CALLS: list[tuple[str, dict[str, Any], Any]] = [
         "search_docs",
         {"codebase": "layered_app", "query": "services"},
         lambda d: docs.search_docs(d, "layered_app", "services"),
+    ),
+    (
+        "check_change",
+        {"codebase": "layered_app", "proposal": {"description": "Inherit from BaseService."}},
+        lambda d: change.check_change(
+            d, "layered_app", ChangeProposal(description="Inherit from BaseService.")
+        ),
+    ),
+    (
+        "check_change",
+        {"codebase": "layered_app", "proposal": {"description": MANY_NAMES}},
+        lambda d: change.check_change(d, "layered_app", ChangeProposal(description=MANY_NAMES)),
     ),
 ]
 
@@ -114,7 +137,7 @@ def tools(server: FastMCP) -> dict[str, Any]:
 
 
 def test_the_tools_are_those_of_the_design(server: FastMCP) -> None:
-    # check_change arrives in Phase 6; module_summary is stretch.
+    # module_summary is stretch.
     assert set(tools(server)) == set(TOOLS)
 
 
@@ -146,6 +169,7 @@ def test_defaults_are_the_documented_limits(server: FastMCP) -> None:
     assert defaults("callees") == {"depth": 1, "limit": 12}
     assert defaults("impact_of") == {"max_depth": 3, "limit": 8}
     assert defaults("search_docs") == {"limit": 5}
+    assert defaults("check_change") == {}
 
 
 @pytest.mark.parametrize(("name", "args", "direct"), CALLS, ids=[c[0] for c in CALLS])
@@ -171,7 +195,13 @@ def test_results_fit_the_size_budget_at_default_limits(
 def test_an_unknown_codebase_is_an_error_listing_the_registered_ones(
     server: FastMCP, name: str
 ) -> None:
-    args = {"codebase": "nope", "name": "x", "symbol": "x", "query": "x"}
+    args = {
+        "codebase": "nope",
+        "name": "x",
+        "symbol": "x",
+        "query": "x",
+        "proposal": {"description": "x"},
+    }
     schema = tools(server)[name].input_schema["properties"]
 
     with pytest.raises(ToolError, match="registered codebases: layered_app, plainrepo"):
@@ -190,6 +220,8 @@ def test_a_registered_codebase_that_is_not_indexed_is_an_error(server: FastMCP) 
         ("callers", {"codebase": "layered_app", "symbol": "get_order", "depth": 9}),
         ("search_docs", {"codebase": "layered_app", "query": "  "}),
         ("search_docs", {"codebase": "layered_app", "query": "word " * 101}),
+        ("check_change", {"codebase": "layered_app", "proposal": {"description": " "}}),
+        ("check_change", {"codebase": "layered_app", "proposal": {"description": "w" * 501}}),
     ],
 )
 def test_bad_arguments_are_tool_errors_with_the_reason(
@@ -207,6 +239,27 @@ def test_an_ambiguous_name_returns_candidates(server: FastMCP) -> None:
     assert len(graph.candidates) == 2
 
 
+def test_check_change_lists_an_ambiguous_name_with_its_candidates(server: FastMCP) -> None:
+    result = call(
+        server,
+        "check_change",
+        {"codebase": "layered_app", "proposal": {"description": "Cache `get_one` rows."}},
+    )
+    checked = ChangeCheck.model_validate(result.structured_content)
+
+    assert checked.resolved_symbols == []
+    assert [(a.name, len(a.candidates)) for a in checked.ambiguous] == [("get_one", 2)]
+
+
+def test_check_change_takes_explicit_symbols(server: FastMCP) -> None:
+    proposal = {"description": "Rename it.", "symbols": ["BaseService"]}
+    result = call(server, "check_change", {"codebase": "layered_app", "proposal": proposal})
+    checked = ChangeCheck.model_validate(result.structured_content)
+
+    assert [ref.qualname for ref in checked.resolved_symbols] == ["app._base.service.BaseService"]
+    assert checked.affected.total == 12
+
+
 def test_no_tool_writes(server: FastMCP, driver: Driver) -> None:
     def counts() -> tuple[int, int]:
         rows, _, _ = driver.execute_query(
@@ -219,3 +272,24 @@ def test_no_tool_writes(server: FastMCP, driver: Driver) -> None:
         call(server, name, args)
 
     assert counts() == before
+
+
+def test_check_change_takes_a_proposal_with_a_required_description(server: FastMCP) -> None:
+    schema = tools(server)["check_change"].input_schema
+    proposal = schema["properties"]["proposal"]
+    if "$ref" in proposal:
+        proposal = schema["$defs"][proposal["$ref"].rsplit("/", 1)[-1]]
+
+    assert "proposal" in schema["required"]
+    assert proposal["required"] == ["description"]
+    assert proposal.get("additionalProperties") is False
+    with pytest.raises(ToolError):
+        call(
+            server,
+            "check_change",
+            {"codebase": "layered_app", "proposal": {"description": "x", "extra": 1}},
+        )
+
+
+def test_check_change_says_what_an_empty_candidate_list_means(server: FastMCP) -> None:
+    assert "find_symbol" in tools(server)["check_change"].description
