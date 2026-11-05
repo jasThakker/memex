@@ -5,7 +5,7 @@ General knowledge graph over any Python codebase and its docs, served to agents 
 ## Commands
 - Setup: `uv sync` (Python 3.14, pinned in `.python-version`; uv downloads it if missing)
 - Fetch benchmark repos: `uv run python scripts/fetch_codebases.py` (Mealie and httpx into `vendor/`, gitignored; never commit them)
-- Neo4j: `docker compose up -d neo4j` (browser at http://localhost:7474)
+- Neo4j: `docker compose up -d neo4j` (browser at http://localhost:7474, login `neo4j` / `memex-dev-password`, override with `NEO4J_PASSWORD`; `docker compose down -v` wipes the data)
 - Unit tests: `uv run pytest` (default run: no DB, no `vendor/`; excludes the `neo4j` and `realrepo` markers)
 - Neo4j tests: `uv run pytest -m neo4j` (needs Docker; uses a throwaway testcontainer)
 - Real-repo smoke tests (Mealie, httpx): `uv run pytest -m realrepo` (needs fetched `vendor/`)
