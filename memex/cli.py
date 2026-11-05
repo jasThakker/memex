@@ -1,9 +1,10 @@
-"""The `memex` command: `memex index <codebase>` and `memex stats <codebase>`.
+"""The `memex` command: `memex index <codebase>`, `memex stats <codebase>` and `memex serve`.
 
 `index` parses the codebase, replaces it in Neo4j and prints a summary; `stats` prints the same
-summary from what Neo4j holds. Exit codes: 0 success, 1 a database problem or a codebase that
-is not indexed, 2 a usage or config error (including a missing package directory or a
-malformed NEO4J_URI). `memex serve` arrives in Phase 5.
+summary from what Neo4j holds; `serve` runs the read-only MCP server on stdio for every
+codebase in memex.toml. Exit codes: 0 success, 1 a database problem or a codebase that is not
+indexed, 2 a usage or config error (including a missing package directory or a malformed
+NEO4J_URI).
 """
 
 import argparse
@@ -15,11 +16,12 @@ from collections.abc import Mapping, Sequence
 
 from neo4j.exceptions import AuthError, ConfigurationError, Neo4jError, ServiceUnavailable
 
-from memex.config import Codebase, ConfigError, UnknownCodebaseError, load_config
+from memex.config import Codebase, ConfigError, Registry, UnknownCodebaseError, load_config
 from memex.graph.model import CodebaseNode, GraphBatch, ModuleNode
 from memex.graph.store import connect, ensure_schema, label_of, replace_codebase
 from memex.ingest.code import index_code
 from memex.ingest.code.walker import WalkerError
+from memex.mcp.server import build_server
 from memex.query.codebases import codebase_stats
 from memex.query.models import CodebaseStats
 
@@ -29,12 +31,16 @@ MAX_PARSE_ERRORS_SHOWN = 10
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        codebase = load_config(args.config).get(args.codebase)
+        registry = load_config(args.config)
+        codebase = None if args.command == "serve" else registry.get(args.codebase)
     except (ConfigError, UnknownCodebaseError) as error:
         print(f"memex: {error}", file=sys.stderr)
         return 2
     uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
     try:
+        if args.command == "serve":
+            return _serve(registry)
+        assert codebase is not None
         if args.command == "index":
             return _index(codebase)
         return _stats(codebase.name)
@@ -58,7 +64,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     except Neo4jError as error:
         action = "writing" if args.command == "index" else "reading"
-        print(f"memex: Neo4j error while {action} {codebase.name}: {error}", file=sys.stderr)
+        target = codebase.name if codebase else "the graph"
+        print(f"memex: Neo4j error while {action} {target}: {error}", file=sys.stderr)
         return 1
 
 
@@ -125,6 +132,13 @@ def _stats(name: str) -> int:
     return 0
 
 
+def _serve(registry: Registry) -> int:
+    with connect() as driver:
+        driver.verify_connectivity()  # fail at start, not on the first tool call
+        build_server(driver, registry).run(transport="stdio", show_banner=False)
+    return 0
+
+
 def _counts(counts: Mapping[str, int]) -> str:
     """`a 3, b 2`: largest first, ties by name."""
     ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
@@ -141,4 +155,6 @@ def _parser() -> argparse.ArgumentParser:
         sub = commands.add_parser(command, help=help_text)
         sub.add_argument("codebase", help="a codebase name from memex.toml")
         sub.add_argument("--config", default="memex.toml", help="path to memex.toml")
+    serve = commands.add_parser("serve", help="run the read-only MCP server on stdio")
+    serve.add_argument("--config", default="memex.toml", help="path to memex.toml")
     return parser
