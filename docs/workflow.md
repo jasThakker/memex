@@ -18,7 +18,7 @@ How Memex is built with Claude Code, and why each part of the workflow exists. T
    3. Claude runs `uv run pytest` and shows it failing (red).
    4. Claude implements; the lint hook reports any ruff problems, which Claude fixes in visible edits.
    5. Claude runs the tests passing (green).
-   6. For slices touching ingest, graph, query or check_change, the user invokes the reviewer subagent with the exact prompt Claude provides, and decides which findings to fix.
+   6. For slices touching ingest, graph or query, the user invokes the reviewer subagent with the exact prompt Claude provides, and decides which findings to fix.
    7. Claude proposes a commit message; the user approves; Claude commits.
 4. **Close.** Claude drafts the DEVLOG.md entry and the user edits it. Claude names the next subagent to run (if any), why, and the exact prompt. The branch is merged into `main`.
 5. **Reset.** The user runs `/clear`. Everything needed to continue is in CLAUDE.md (loaded automatically), DESIGN.md, DEVLOG.md, this file and git history.

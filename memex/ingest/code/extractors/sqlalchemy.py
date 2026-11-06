@@ -29,6 +29,8 @@ _KINDS = {"ForeignKey": "foreign_key", "relationship": "relationship"}
 class SqlAlchemyExtractor:
     name: ClassVar[str] = "sqlalchemy"
 
+    # Extractor stage of indexing: for each assignment in each class body, finds ForeignKey(...) and
+    # relationship(...) calls and adds a REFERENCES edge from this model to the target model.
     def extract(self, modules: Sequence[ParsedModule], symbols: SymbolTable) -> list[Edge]:
         edges: dict[tuple[str, str, str, str], Edge] = {}
         for module, cls, definition in _classes(modules):
@@ -62,6 +64,8 @@ class SqlAlchemyExtractor:
                     )
         return list(edges.values())
 
+    # Extractor stage of indexing: gives each class with `__tablename__ = '...'` a tablename
+    # property.
     def class_properties(
         self, modules: Sequence[ParsedModule], symbols: SymbolTable
     ) -> Mapping[str, Mapping[str, str]]:
@@ -73,6 +77,7 @@ class SqlAlchemyExtractor:
         return properties
 
 
+# Helper: every (module, ClassNode, ast.ClassDef) in the codebase.
 def _classes(
     modules: Sequence[ParsedModule],
 ) -> list[tuple[ParsedModule, ClassNode, ast.ClassDef]]:
@@ -85,6 +90,7 @@ def _classes(
     return found
 
 
+# Helper for extract: (attribute, value) for `x = ...` or `x: T = ...` in a class body, else None.
 def _assignment(statement: ast.stmt) -> tuple[str, ast.expr] | None:
     """(attribute, value) for `name = value` or `name: T = value`, else None."""
     match statement:
@@ -95,6 +101,8 @@ def _assignment(statement: ast.stmt) -> tuple[str, ast.expr] | None:
     return None
 
 
+# Helper for extract: every call inside an expression, in source order (ForeignKey can be nested
+# inside mapped_column(...)).
 def _calls_in(expr: ast.expr) -> list[ast.Call]:
     """Every call inside an expression, in source order. Iterative."""
     found: list[ast.Call] = []
@@ -107,6 +115,8 @@ def _calls_in(expr: ast.expr) -> list[ast.Call]:
     return sorted(found, key=lambda call: (call.lineno, call.col_offset))
 
 
+# Helper for extract: 'foreign_key' or 'relationship' if the call really resolves to SQLAlchemy's
+# ForeignKey or relationship, else None.
 def _kind(module: ParsedModule, call: ast.Call, symbols: SymbolTable) -> str | None:
     """`foreign_key` or `relationship` if the call is that SQLAlchemy function, else None."""
     resolved = symbols.resolve_expression(module, call.func)
@@ -118,6 +128,8 @@ def _kind(module: ParsedModule, call: ast.Call, symbols: SymbolTable) -> str | N
     return _KINDS.get(dotted.rsplit(".", 1)[-1])
 
 
+# Helper for extract: ForeignKey('users.id') -> the one class whose __tablename__ is 'users' (or
+# ForeignKey(User.id) -> User). None if ambiguous.
 def _foreign_key_target(
     module: ParsedModule, argument: ast.expr, symbols: SymbolTable
 ) -> str | None:
@@ -135,6 +147,8 @@ def _foreign_key_target(
     return None
 
 
+# Helper for extract: relationship('User') or relationship(User) -> the mapped class it names. None
+# if ambiguous.
 def _relationship_target(
     module: ParsedModule, argument: ast.expr, symbols: SymbolTable
 ) -> str | None:
@@ -155,6 +169,7 @@ def _relationship_target(
     return candidates[0] if len(candidates) == 1 else None
 
 
+# Helper: True if a class (or an ancestor) is an ORM model: has __tablename__ or a SQLAlchemy base.
 def _is_mapped(cls: str, symbols: SymbolTable) -> bool:
     """True if the class or an in-codebase ancestor has a `__tablename__` (a string, or a
     method such as `@declared_attr def __tablename__`) or a base under `sqlalchemy`."""
@@ -169,6 +184,7 @@ def _is_mapped(cls: str, symbols: SymbolTable) -> bool:
     )
 
 
+# Helper: the in-codebase class a resolved name is, or None.
 def _class(resolved: tuple[str, bool] | None, symbols: SymbolTable) -> str | None:
     """The in-codebase class a resolved name is, or None."""
     if resolved is None or resolved[1] or resolved[0] not in symbols.classes:

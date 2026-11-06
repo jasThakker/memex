@@ -13,11 +13,9 @@ from fastmcp.exceptions import ToolError
 from neo4j import Driver
 
 from memex.config import Registry, UnknownCodebaseError
-from memex.query import calls, change, codebases, docs, impact, symbols
+from memex.query import calls, codebases, docs, impact, symbols
 from memex.query.models import (
     CallGraph,
-    ChangeCheck,
-    ChangeProposal,
     CodebaseList,
     DocSearch,
     Impact,
@@ -28,9 +26,11 @@ from memex.query.scope import NotIndexedError, check_codebase
 INSTRUCTIONS = """\
 Memex answers questions about the structure of indexed Python codebases and their docs:
 where symbols are, who calls what, what depends on a symbol, and which doc sections are
-relevant. Before a change, check_change lists the code it affects and the documented rules
-that apply, each quoted and cited; judge the rules yourself. Every tool except
-list_codebases needs a codebase name; call list_codebases first.
+relevant. Every tool except list_codebases needs a codebase name; call list_codebases first.
+Before a change: call impact_of on each symbol you will change, to see what depends on it and
+which doc sections mention it; call search_docs with a short description of the change to
+find documented rules; Read the cited lines; then judge whether the change is safe and which
+rules apply. Memex finds and cites; you decide.
 A `symbol` is a full dotted qualname or its last segments (`get_one`, `Client.get`). When a
 name matches several symbols, the result has symbol=None and the candidates: call again with
 one of their qualnames. Results are capped by `limit`; `truncated` says more exist.
@@ -45,9 +45,13 @@ READ_ONLY = {
 }
 
 
+# Creates the FastMCP server and registers the 6 tools. Called by cli._serve. No Cypher and no logic
+# here: each tool is a thin wrapper.
 def build_server(driver: Driver, registry: Registry) -> FastMCP:
     mcp = FastMCP("memex", instructions=INSTRUCTIONS)
 
+    # Shared by five tools: checks the codebase (check_codebase), runs the query, and turns
+    # UnknownCodebase/NotIndexed/ValueError into a clean ToolError.
     def scoped[T](codebase: str, query: Callable[[], T]) -> T:
         try:
             check_codebase(driver, registry, codebase)
@@ -55,12 +59,15 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         except (UnknownCodebaseError, NotIndexedError, ValueError) as error:
             raise ToolError(str(error)) from error
 
+    # Tool wrapper -> codebases.list_codebases. The only tool with no codebase argument, so no
+    # scoped().
     @mcp.tool(annotations=READ_ONLY)
     def list_codebases() -> CodebaseList:
         """The indexed codebases: source, ref and commit, when indexed, node counts by label,
         edge counts by type, extractors and parse errors."""
         return codebases.list_codebases(driver, registry)
 
+    # Tool wrapper -> symbols.find_symbol (ranked name search).
     @mcp.tool(annotations=READ_ONLY)
     def find_symbol(
         codebase: str,
@@ -73,6 +80,7 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         has its path, line, layer, domain, signature and first docstring line."""
         return scoped(codebase, lambda: symbols.find_symbol(driver, codebase, name, kind, limit))
 
+    # Tool wrapper -> calls.callers (who calls X, N hops).
     @mcp.tool(annotations=READ_ONLY)
     def callers(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGraph:
         """Functions that call `symbol`, up to `depth` (1 to 5) calls away, each at its
@@ -81,6 +89,7 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         are recorded on the base class's __init__."""
         return scoped(codebase, lambda: calls.callers(driver, codebase, symbol, depth, limit))
 
+    # Tool wrapper -> calls.callees (what X calls, N hops).
     @mcp.tool(annotations=READ_ONLY)
     def callees(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGraph:
         """Functions that `symbol` calls, up to `depth` (1 to 5) calls away, each at its
@@ -88,6 +97,7 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         __init__."""
         return scoped(codebase, lambda: calls.callees(driver, codebase, symbol, depth, limit))
 
+    # Tool wrapper -> impact.impact_of (what depends on X).
     @mcp.tool(annotations=READ_ONLY)
     def impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact:
         """What depends on `symbol` (and on everything it defines): code that calls, inherits,
@@ -100,6 +110,7 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
             codebase, lambda: impact.impact_of(driver, codebase, symbol, max_depth, limit)
         )
 
+    # Tool wrapper -> docs.search_docs (full-text doc search).
     @mcp.tool(annotations=READ_ONLY)
     def search_docs(codebase: str, query: str, limit: int = 5) -> DocSearch:
         """Full-text search over the codebase's doc sections (headings and text). The query
@@ -107,18 +118,5 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
         range, a short snippet and the symbols the section mentions; read the file for the
         full section."""
         return scoped(codebase, lambda: docs.search_docs(driver, codebase, query, limit))
-
-    @mcp.tool(annotations=READ_ONLY)
-    def check_change(codebase: str, proposal: ChangeProposal) -> ChangeCheck:
-        """Check a proposed change before making it. `proposal.description` says what will
-        change (plain text, at most 500 characters); `proposal.symbols` optionally names the
-        symbols, otherwise code-shaped names in the description are used. Returns the
-        resolved, ambiguous and unresolved names (an ambiguous name with no candidates listed
-        has more than fit: call find_symbol for it), how many dependents each layer has, and up
-        to 6 documented rules: one sentence each with its stance (forbids, encourages or
-        related, from modal verbs only), path, heading and line range, found because the
-        section mentions the changed code or by a search on the description. The stance is a
-        hint: read the quote and judge."""
-        return scoped(codebase, lambda: change.check_change(driver, codebase, proposal))
 
     return mcp

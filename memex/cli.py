@@ -28,6 +28,10 @@ from memex.query.models import CodebaseStats
 MAX_PARSE_ERRORS_SHOWN = 10
 
 
+# The `memex` command's entry point. Parses the arguments, loads memex.toml, looks up the codebase
+# (not needed for `serve`), then dispatches to _index, _stats or _serve. Its main job is turning
+# every expected failure into one readable line and an exit code: 2 for config or usage errors, 1
+# for Neo4j problems (down, bad password, query error).
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -69,6 +73,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
 
+# Builds the summary straight from the in-memory GraphBatch (count nodes by label, edges by kind,
+# modules by layer and domain), so `index` can print it without querying Neo4j again. It must match
+# what `stats` later reads from the database.
 def stats_from_batch(batch: GraphBatch) -> CodebaseStats:
     """What `codebase_stats` will read back once the batch is stored."""
     codebase = next(node for node in batch.nodes if isinstance(node, CodebaseNode))
@@ -90,6 +97,8 @@ def stats_from_batch(batch: GraphBatch) -> CodebaseStats:
     )
 
 
+# Turns a CodebaseStats into the text block you see after `memex index <name>` or `memex stats
+# <name>` (files, parse errors, source @ ref, node/edge/layer/domain counts).
 def format_stats(stats: CodebaseStats) -> str:
     source = "local"
     if stats.source:
@@ -107,6 +116,10 @@ def format_stats(stats: CodebaseStats) -> str:
     return "\n".join(lines) + "\n"
 
 
+# `memex index <codebase>` (the write path). index_codebase() does all the parsing and resolving in
+# memory (no database), then this connects to Neo4j, creates constraints and indexes, and
+# replace_codebase() swaps the old graph for the new one in one transaction. Finally it prints the
+# summary, the first 10 parse errors and the time taken.
 def _index(codebase: Codebase) -> int:
     started = time.perf_counter()
     batch = index_codebase(codebase)
@@ -121,6 +134,8 @@ def _index(codebase: Codebase) -> int:
     return 0
 
 
+# `memex stats <codebase>`. Reads the summary back from Neo4j (the same codebase_stats query the
+# list_codebases tool uses). Exits 1 if it was never indexed.
 def _stats(name: str) -> int:
     with connect() as driver:
         driver.verify_connectivity()
@@ -132,6 +147,9 @@ def _stats(name: str) -> int:
     return 0
 
 
+# `memex serve` (the read path). Claude Code launches this via .mcp.json. It checks Neo4j is
+# reachable up front, builds the FastMCP server with all the tools (mcp/server.py build_server) and
+# talks to the agent over stdin/stdout until closed.
 def _serve(registry: Registry) -> int:
     with connect() as driver:
         driver.verify_connectivity()  # fail at start, not on the first tool call
@@ -139,12 +157,16 @@ def _serve(registry: Registry) -> int:
     return 0
 
 
+# Formatting helper for format_stats: {"Function": 1721, "Class": 709} becomes "Function 1721, Class
+# 709", biggest first.
 def _counts(counts: Mapping[str, int]) -> str:
     """`a 3, b 2`: largest first, ties by name."""
     ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     return ", ".join(f"{key} {count}" for key, count in ordered) or "none"
 
 
+# Defines the command line with argparse: three subcommands. `index` and `stats` take a codebase
+# name; all three take --config (default memex.toml).
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="memex", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)

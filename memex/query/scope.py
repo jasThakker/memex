@@ -10,6 +10,8 @@ class NotIndexedError(LookupError):
     """A codebase registered in memex.toml that Neo4j holds nothing for."""
 
 
+# The scope rule, run by scoped() before every tool except list_codebases: the name must be in
+# memex.toml AND indexed in Neo4j.
 def check_codebase(driver: Driver, registry: Registry, name: str) -> None:
     """Raise UnknownCodebaseError (listing the registered names) or NotIndexedError."""
     registry.get(name)

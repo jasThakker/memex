@@ -29,6 +29,8 @@ from memex.ingest.code.resolver import (
 from memex.ingest.code.walker import walk
 
 
+# The code indexing pipeline: walk -> parse every file -> classify -> resolve (imports, inherits,
+# calls, uses) -> extractors. Returns one GraphBatch in memory; no database here.
 def index_code(codebase: Codebase) -> GraphBatch:
     """Every module, class and function of a codebase with its DEFINES, IMPORTS, INHERITS,
     CALLS and USES edges (a USES edge is left out where an extractor's REFERENCES links the
@@ -105,6 +107,8 @@ def index_code(codebase: Codebase) -> GraphBatch:
     )
 
 
+# Helper for index_code: turns the `extractors` names in memex.toml into extractor objects; an
+# unknown name is a ConfigError before any file is read.
 def _extractors(codebase: Codebase) -> list[Extractor]:
     unknown = [name for name in codebase.extractors if name not in EXTRACTORS]
     if unknown:
@@ -115,6 +119,8 @@ def _extractors(codebase: Codebase) -> list[Extractor]:
     return [EXTRACTORS[name]() for name in codebase.extractors]
 
 
+# Helper for index_code: runs each extractor and collects its edges (REFERENCES) and class
+# properties (tablename), rejecting undeclared properties.
 def _run_extractors(
     extractors: Sequence[Extractor], modules: Sequence[ParsedModule], symbols: SymbolTable
 ) -> tuple[list[Edge], dict[str, dict[str, str]]]:
@@ -131,6 +137,8 @@ def _run_extractors(
     return edges, properties
 
 
+# Helper for index_code (classify stage): stamps every node of a file with the file's layer and
+# domain, and drops definitions whose id clashes with a module id.
 def _labeled_without_duplicates(
     codebase: Codebase, modules: Sequence[ParsedModule]
 ) -> tuple[list[ParsedModule], list[str]]:

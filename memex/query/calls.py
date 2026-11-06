@@ -31,6 +31,8 @@ _RETURN = (
 )
 
 
+# Query for the callers tool: functions that call the symbol, N hops. One line:
+# _walk(direction='callers').
 def callers(
     driver: Driver, codebase: str, symbol: str, depth: int = 1, limit: int = 12
 ) -> CallGraph:
@@ -38,6 +40,8 @@ def callers(
     return _walk(driver, codebase, symbol, "callers", depth, limit)
 
 
+# Query for the callees tool: functions the symbol calls, N hops. One line:
+# _walk(direction='callees').
 def callees(
     driver: Driver, codebase: str, symbol: str, depth: int = 1, limit: int = 12
 ) -> CallGraph:
@@ -45,11 +49,14 @@ def callees(
     return _walk(driver, codebase, symbol, "callees", depth, limit)
 
 
+# Helper: rejects a depth outside 1 to 5. Also used by impact_of.
 def check_depth(depth: int, name: str = "depth") -> None:
     if not 1 <= depth <= MAX_DEPTH:
         raise ValueError(f"{name} must be between 1 and {MAX_DEPTH}, got {depth}")
 
 
+# Shared by callers and callees: resolve the symbol, pick the start function, then a level-by-level
+# BFS over CALLS only, one query per depth.
 def _walk(
     driver: Driver, codebase: str, symbol: str, direction: Direction, depth: int, limit: int
 ) -> CallGraph:
@@ -100,6 +107,8 @@ def _walk(
     return graph.model_copy(update={"calls": found[:limit], "truncated": len(found) > limit})
 
 
+# Helper for _walk: a function starts at itself, a class at its own __init__ (constructor calls
+# point there), a module has no calls.
 def _start_function(driver: Driver, codebase: str, ref: SymbolRef) -> str | None:
     """The qualname of the function to walk from, or None if `ref` has no calls."""
     if ref.kind == "function":

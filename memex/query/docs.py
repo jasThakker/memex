@@ -33,6 +33,8 @@ _SEARCH = (
 )
 
 
+# Query for the search_docs tool: validates the text, runs search_sections, and returns hits with a
+# short snippet, never the whole section.
 def search_docs(driver: Driver, codebase: str, query: str, limit: int = 5) -> DocSearch:
     """Doc sections matching `query` in their heading path or text, best first."""
     text = query.strip()
@@ -59,6 +61,7 @@ def search_docs(driver: Driver, codebase: str, query: str, limit: int = 5) -> Do
     return result.model_copy(update={"hits": hits[:limit], "truncated": len(hits) > limit})
 
 
+# Helper for search_docs: runs the full-text query on the doc_text index for this codebase.
 def search_sections(driver: Driver, codebase: str, text: str, fetch: int) -> list[dict[str, Any]]:
     """The best `fetch` doc sections for plain `text`, by score: each row has the node's
     `props` (text included), its `score` and the qualnames it `mentions`. Text with no word
@@ -75,12 +78,16 @@ def search_sections(driver: Driver, codebase: str, text: str, fetch: int) -> lis
     return [dict(row) for row in rows]
 
 
+# Helper: escapes Lucene special characters and lower-cases AND/OR/NOT, so the agent's text is
+# searched as plain words.
 def escape_query(text: str) -> str:
     """`text` as a Lucene query that matches its words and nothing else."""
     escaped = _LUCENE_SPECIAL.sub(r"\\\1", text)
     return _OPERATOR.sub(lambda match: match.group().lower(), escaped)
 
 
+# Helper: at most 200 characters around the first query word, cut between words. Helper for
+# search_docs.
 def snippet(text: str, query: str) -> str:
     """At most SNIPPET_CHARS characters of `text` (whitespace collapsed) around the first
     whole-word occurrence of any query word, ignoring case, cut between words; `...` marks a

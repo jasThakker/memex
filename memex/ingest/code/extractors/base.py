@@ -18,10 +18,14 @@ CLASS_PROPERTIES = frozenset({"tablename"})  # ClassNode fields an extractor may
 class Extractor(Protocol):
     name: ClassVar[str]
 
+    # Interface method every extractor implements: return new edges (usually REFERENCES) between
+    # nodes that already exist.
     def extract(self, modules: Sequence[ParsedModule], symbols: SymbolTable) -> list[Edge]:
         """New edges, typically REFERENCES with `extractor` set to this extractor's name."""
         ...
 
+    # Interface method: extra class properties to set (only those in CLASS_PROPERTIES, today just
+    # 'tablename').
     def class_properties(
         self, modules: Sequence[ParsedModule], symbols: SymbolTable
     ) -> Mapping[str, Mapping[str, str]]:

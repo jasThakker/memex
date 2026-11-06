@@ -19,6 +19,8 @@ from memex.ingest.code.walker import SourceFile
 ROOT_LAYER = "root"
 
 
+# Classify stage of indexing: (layer, domain) for one file, from its path and the memex.toml rules.
+# Layer is the first folder (or a `layers` rule); domain is the next folder or the file name.
 def classify(codebase: Codebase, source: SourceFile) -> tuple[str, str | None]:
     """(layer, domain) for one module; domain is None for some `__init__.py` files."""
     relative = PurePosixPath(source.path).relative_to(PurePosixPath(source.package))
@@ -43,6 +45,8 @@ def classify(codebase: Codebase, source: SourceFile) -> tuple[str, str | None]:
     return layer, normalize_domain(name, codebase.domains)
 
 
+# Helper for classify: cleans a domain name with the `domains` rules (drop underscores, strip
+# prefix/suffix, singularize).
 def normalize_domain(name: str, rules: DomainRules) -> str:
     """Apply, in order: underscore dropping, first matching prefix, first matching suffix,
     singularize. A prefix or suffix that would leave nothing is not stripped."""
@@ -58,6 +62,8 @@ def normalize_domain(name: str, rules: DomainRules) -> str:
     return singularize(name) if rules.singularize else name
 
 
+# Helper for normalize_domain: naive English singular (recipes -> recipe, categories -> category;
+# keeps 'status', 'analytics').
 def singularize(word: str) -> str:
     """`-ies` becomes `-y`; a trailing `-s` is dropped except after `s`, `u` or `i`;
     words ending in `-ics` are kept."""
@@ -70,6 +76,8 @@ def singularize(word: str) -> str:
     return word
 
 
+# Helper for classify: the longest `layers` key the folders start with, e.g. 'db/models' beats 'db'.
+# Returns (label, folders matched) or None.
 def _match_layer(folders: tuple[str, ...], layers: dict[str, str]) -> tuple[str, int] | None:
     """(label, number of folders matched) for the longest `layers` key the folders start with."""
     keys = sorted(layers, key=lambda key: len(PurePosixPath(key).parts), reverse=True)
@@ -80,6 +88,7 @@ def _match_layer(folders: tuple[str, ...], layers: dict[str, str]) -> tuple[str,
     return None
 
 
+# Helper: strips leading or dunder underscores from a name (_base -> base, __init__ -> init).
 def _drop_underscores(name: str) -> str:
     if name.startswith("__") and name.endswith("__") and len(name) > 4:
         return name[2:-2]

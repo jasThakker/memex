@@ -664,3 +664,31 @@ The demo has no automated tests.
 **Numbers:** Mealie exports 3,092 nodes and 9,779 edges (2.8 MB, 0.3 s). Chat spend while testing: about $0.07.
 
 **Next:** none planned. Open items are in the Phase 9 entry.
+
+## Phase 10: Remove check_change (2026-11-06)
+
+**Goal:** Replace the `check_change` tool with a workflow the calling agent follows, because the Phase 7 eval showed the agent answered change questions from the basic tools, not from `check_change`'s guidelines. Built on `phase-10-drop-check-change` from `main`. Decision record: ADR-004.
+
+**Decisions (you chose):**
+- Remove the tool rather than tune its text rules or put an LLM inside the server; teach the workflow in the server instructions.
+- Keep testing light: the existing suites plus two sample questions.
+- Every function in `memex/` gets a short comment above it saying what it does and, for a helper, what it serves (done on this branch first, before the removal).
+
+**Built:**
+- Removed `memex/query/change.py`, `memex/query/rules.py`, the six `check_change` models in `memex/query/models.py` (deletion only, under ADR-001; the contract snapshot diff only drops their entries), their tests and the `rules.md` fixture.
+- `INSTRUCTIONS` in `memex/mcp/server.py` gains the before-a-change workflow: `impact_of` on each symbol, `search_docs` on a description, Read the cited lines, judge.
+- Tests: the MCP tests expect six tools and the workflow text (seen red first); the Mealie smoke tests pin the AGENTS.md `AppSettings` rule through `impact_of`'s docs and `search_docs`, with answers checked on the real graph before writing them.
+- DESIGN sections 10, 11, 12, 13 and 14, README, CLAUDE.md, `docs/workflow.md`, ADR-002 status and one demo chat hint updated.
+
+**Checked:** `uv run pytest -m "not realrepo"` 535 passed; the Mealie and httpx tool smoke tests 25 passed; ruff clean.
+
+**Sample questions** (`eval/results/phase10-workflow`, condition B only, N=1, $0.27): the agent called `impact_of` and `search_docs` on both, as instructed.
+
+| Question | F1 now | F1 Phase 7 (B, with check_change) | F1 Phase 7 (A, grep) | Input tokens now / Phase 7 B |
+|---|---|---|---|---|
+| q11 | 0.67 | 0.55 | 0.64 | 186k / 141k |
+| q12 | 0.55 | 0.55 | 0.55 | 40k / 67k |
+
+Two questions at N=1 show the workflow is no worse; they do not show it is better.
+
+**Next:** none planned. A full eval run would confirm the change questions at N greater than 1; an MCP prompt is the fallback if agents compose the tools poorly.

@@ -67,6 +67,8 @@ from memex.ingest.code.parser import ParsedModule, RawImport
 MAX_REEXPORT_HOPS = 5
 
 
+# Resolve-stage linker: turns each RawImport into an IMPORTS edge to the real target (following
+# re-exports), or to an External node for outside names.
 def link_imports(
     codebase: str, modules: Sequence[ParsedModule]
 ) -> tuple[list[Edge], list[ExternalNode]]:
@@ -100,6 +102,8 @@ def link_imports(
     return list(edges.values()), list(externals.values())
 
 
+# Resolve-stage linker: an INHERITS edge from each class to each base class as written; outside
+# bases become External nodes.
 def link_inherits(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], list[ExternalNode]]:
     """INHERITS edges for every class, plus the External nodes they point at."""
     edges: list[Edge] = []
@@ -128,6 +132,8 @@ def link_inherits(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], list
     return edges, list(externals.values())
 
 
+# Resolve-stage linker: for every function, finds each call site and asks _CallResolver.resolve;
+# makes one CALLS edge per (caller, callee), exact or inferred, and counts the unresolved calls.
 def link_calls(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], int]:
     """CALLS edges for every function, plus the number of unresolved call sites."""
     edges: dict[tuple[str, str], Edge] = {}
@@ -163,6 +169,8 @@ def link_calls(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], int]:
     return list(edges.values()), unresolved
 
 
+# Resolve-stage linker (ADR-003): a USES edge where code names a function or class as a value
+# without calling it, e.g. Depends(get_current_user).
 def link_uses(codebase: str, symbols: SymbolTable) -> list[Edge]:
     """USES edges (ADR-003): a function or class naming a codebase function or class as a
     value, in a function's body and own parameter defaults, or in a class body's values.
@@ -200,6 +208,7 @@ def link_uses(codebase: str, symbols: SymbolTable) -> list[Edge]:
 _ValueVisit = tuple[ast.AST, frozenset[str], bool, bool]
 
 
+# Helper for link_uses: every value reference in a function's body and its own parameter defaults.
 def _function_values(
     definition: ast.FunctionDef | ast.AsyncFunctionDef, resolver: _CallResolver
 ) -> list[tuple[str, int]]:
@@ -214,6 +223,7 @@ def _function_values(
     return _values(stack, resolver)
 
 
+# Helper for link_uses: every value reference in a class body (methods left out).
 def _class_values(definition: ast.ClassDef, resolver: _CallResolver) -> list[tuple[str, int]]:
     """(target, line) of every value reference in a class body, nested defs left out."""
     stack: list[_ValueVisit] = [
@@ -224,6 +234,8 @@ def _class_values(definition: ast.ClassDef, resolver: _CallResolver) -> list[tup
     return _values(stack, resolver)
 
 
+# Helper for link_uses: walks expressions with a stack, finds names read as values and resolves each
+# with value_target. Skips annotations.
 def _values(stack: list[_ValueVisit], resolver: _CallResolver) -> list[tuple[str, int]]:
     """Walks expressions for read names and dotted names, skipping annotations. Iterative."""
     found: list[tuple[str, int]] = []
@@ -314,6 +326,8 @@ _LITERALS = (
 class _CallResolver:
     """Resolves the call sites inside one function (DESIGN.md section 9)."""
 
+    # Sets up resolving for ONE function: its class (for self.m()), the name of self/cls, whether it
+    # is a classmethod, and imports done inside it.
     def __init__(
         self,
         symbols: SymbolTable,
@@ -348,6 +362,8 @@ class _CallResolver:
             if not raw.module_level and function.line <= raw.line <= function.end_line
         }
 
+    # Used by link_uses: which function or class a name like `helper` or `self.service.run` refers
+    # to, or None.
     def value_target(
         self, expr: ast.Name | ast.Attribute, names: frozenset[str], receiver_in_scope: bool
     ) -> str | None:
@@ -386,6 +402,9 @@ class _CallResolver:
                 target = dotted
         return target
 
+    # The call-resolution entry point, one call site at a time: bare name -> _resolve_name_call,
+    # attribute -> _resolve_attribute_call. Returns (target, exact|inferred), EXTERNAL or
+    # UNRESOLVED.
     def resolve(self, site: _CallSite) -> _Outcome:
         """The outcome of one call site, seen from the scope it sits in."""
         self.locals = site.locals
@@ -397,6 +416,8 @@ class _CallResolver:
             return self._resolve_attribute_call(func)
         return _EXTERNAL if self._root_is_external(func) else _UNRESOLVED
 
+    # Helper for resolve: a bare call `f()`. Defined or imported in the module -> exact; a local
+    # variable -> unresolved; otherwise try _inferred (unique name).
     def _resolve_name_call(self, name: str) -> _Outcome:
         if name == self.active_receiver and self.is_classmethod and self.cls is not None:
             return self._target(self.cls)  # cls(...)
@@ -410,6 +431,9 @@ class _CallResolver:
         dotted, is_external = head
         return _EXTERNAL if is_external else self._target(dotted)
 
+    # Helper for resolve: a call `x.m()`. Works out the class of x (self, super(), a typed
+    # self.attr, C(...), a class name, a module), then finds m on it -> exact; else external, or
+    # _inferred.
     def _resolve_attribute_call(self, func: ast.Attribute) -> _Outcome:
         receiver, name = func.value, func.attr
         cls: str | None = None
@@ -441,6 +465,7 @@ class _CallResolver:
             return _EXTERNAL
         return self._inferred(name)
 
+    # Helper for _resolve_attribute_call: super().m() looks m up on the bases of the method's class.
     def _resolve_super(self, call: ast.Call, name: str) -> _Outcome:
         """`super().m()` or `super(C, self).m()`: the bases of the method's class (or of C).
 
@@ -462,6 +487,8 @@ class _CallResolver:
             return _EXTERNAL  # the method comes from a base outside the codebase
         return _UNRESOLVED
 
+    # Helper (Phase 9 typed attributes): the class of self.a or self.a.b, from annotations,
+    # properties or __init__ assignments.
     def _attribute_class(self, expr: ast.expr) -> str | None:
         """The class of `self.a` or `self.a.b`, one typed attribute per step, or None."""
         if isinstance(expr, ast.Name):
@@ -472,6 +499,8 @@ class _CallResolver:
             return None if owner is None else self.symbols.attribute_class(owner, expr.attr)
         return None
 
+    # Helper: what a bare name means inside this function: a local variable, an in-codebase or
+    # outside dotted name, or unknown.
     def _head(self, name: str) -> tuple[str, bool] | str | None:
         """What a bare name in this function refers to: (dotted, is_external), _LOCAL or None."""
         if name in self.imports:
@@ -480,6 +509,8 @@ class _CallResolver:
             return _LOCAL
         return self.symbols.resolve_name(self.module, name)
 
+    # Helper: the full dotted name of `a` or `a.b.c` as the module binds it, plus whether it is
+    # outside the codebase.
     def _dotted(self, expr: ast.expr) -> tuple[str, bool] | None:
         """(dotted, is_external) of a name or attribute chain not bound locally, or None."""
         parts: list[str] = []
@@ -501,6 +532,8 @@ class _CallResolver:
             dotted = found
         return dotted, False
 
+    # Helper: True if a call chain starts at a literal, a builtin or an outside import ('x'.join(),
+    # json.dumps) -> ignored, not unresolved.
     def _root_is_external(self, expr: ast.expr) -> bool:
         """True if a receiver chain starts at a literal, a builtin or an outside name."""
         while True:
@@ -518,6 +551,7 @@ class _CallResolver:
             return isinstance(head, tuple) and head[1]
         return False
 
+    # Helper: the function a call to an in-codebase name runs; calling a class means its __init__.
     def _target(self, dotted: str) -> _Outcome:
         """The function a call to an in-codebase name runs."""
         if dotted in self.symbols.functions:
@@ -527,6 +561,8 @@ class _CallResolver:
             return _NOT_A_FUNCTION if init is None else (init, "exact")
         return _UNRESOLVED
 
+    # Rule 5, the fallback: if exactly ONE function in the codebase has this name, return it as
+    # 'inferred'; otherwise unresolved. Never guesses.
     def _inferred(self, name: str) -> _Outcome:
         candidates = self.symbols.functions_by_name.get(name, [])
         is_dunder = name.startswith("__") and name.endswith("__")
@@ -534,6 +570,7 @@ class _CallResolver:
             return candidates[0], "inferred"
         return _UNRESOLVED
 
+    # Helper: True if an expression is a `super(...)` call.
     @staticmethod
     def _is_super(expr: ast.expr) -> bool:
         return (
@@ -555,6 +592,8 @@ class _CallSite:
 _Scope = ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda
 
 
+# Helper for link_calls: every call inside a function body (nested defs and lambdas included), each
+# with the local names in scope. Iterative.
 def _call_sites(
     definition: ast.FunctionDef | ast.AsyncFunctionDef, receiver: str | None
 ) -> list[_CallSite]:
@@ -588,6 +627,7 @@ def _call_sites(
     return sorted(found, key=lambda site: (site.call.lineno, site.call.col_offset))
 
 
+# Helper: the parameter names of a function or lambda.
 def _parameters(scope: _Scope) -> set[str]:
     arguments = scope.args
     return {
@@ -601,6 +641,8 @@ def _parameters(scope: _Scope) -> set[str]:
     }
 
 
+# Helper: names a function binds itself (parameters, assignments, nested defs). Used to tell a local
+# variable from a module-level name.
 def _scope_names(scope: _Scope) -> frozenset[str]:
     """Names one function or lambda binds itself: parameters, assigned names, nested def and
     class names, except-as names. Names bound only inside nested scopes are not included."""
@@ -622,6 +664,7 @@ def _scope_names(scope: _Scope) -> frozenset[str]:
     return frozenset(names)
 
 
+# Helper for _CallResolver.__init__: a decorator's name, to spot @staticmethod and @classmethod.
 def _decorator_name(decorator: ast.expr) -> str | None:
     if isinstance(decorator, ast.Name):
         return decorator.id
@@ -636,6 +679,8 @@ class SymbolTable:
     Shared by the resolver and the framework extractors (DESIGN.md section 6).
     """
 
+    # Builds the lookup tables once from all parsed modules: every qualname, classes, functions,
+    # functions_by_name, and so on. Shared by the resolver and the extractors.
     def __init__(self, modules: Sequence[ParsedModule]) -> None:
         self.modules = {module.source.qualname: module for module in modules}
         self.symbols = {node.qualname for module in modules for node in module.nodes}
@@ -671,10 +716,12 @@ class SymbolTable:
         self._class_attributes: dict[str, dict[str, str]] = {}
         self._typed_attributes: dict[str, dict[str, str | None]] = {}
 
+    # Lookup: the parsed module a qualname comes from.
     def module_of(self, qualname: str) -> ParsedModule:
         """The parsed module a module, class or function node comes from."""
         return self._module_of[qualname]
 
+    # Lookup: every name a module binds at top level (definitions, assignments, imports). Cached.
     def module_names(self, module: ParsedModule) -> frozenset[str]:
         """Every name a module binds at module level: definitions, assignments, imports."""
         qualname = module.source.qualname
@@ -697,6 +744,8 @@ class SymbolTable:
             self._module_names[qualname] = frozenset(name for name in names if name)
         return self._module_names[qualname]
 
+    # Lookup: string constants assigned in a class body, e.g. __tablename__ = 'users'. Used by the
+    # sqlalchemy extractor.
     def class_attributes(self, cls: str) -> dict[str, str]:
         """String literals assigned directly in a class body: `__tablename__ = "users"`."""
         if cls not in self._class_attributes:
@@ -716,12 +765,16 @@ class SymbolTable:
             self._class_attributes[cls] = found
         return self._class_attributes[cls]
 
+    # Lookup: classes whose body assigns this string to this attribute (which class has
+    # __tablename__ 'users'?). Used by the extractor.
     def by_class_attribute(self, attribute: str, value: str) -> list[str]:
         """Classes whose body assigns the string `value` to `attribute`, sorted."""
         return sorted(
             cls for cls in self.classes if self.class_attributes(cls).get(attribute) == value
         )
 
+    # Lookup: each base of a class as written, resolved to a dotted name (and whether it is outside
+    # the codebase).
     def written_bases(self, cls: str) -> list[tuple[str, bool] | None]:
         """(dotted, is_external) of each base as written, or None where it cannot be placed.
 
@@ -741,6 +794,7 @@ class SymbolTable:
             self._written_bases[cls] = found
         return self._written_bases[cls]
 
+    # Lookup: the in-codebase base classes of a class.
     def bases(self, cls: str) -> list[str]:
         """In-codebase base classes of a class, in the order written."""
         return [
@@ -749,6 +803,7 @@ class SymbolTable:
             if not is_external and dotted in self.classes and dotted != cls
         ]
 
+    # Lookup: a class and all its in-codebase ancestors, each once (safe with cycles).
     def ancestors(self, cls: str) -> list[str]:
         """The class and every in-codebase class it inherits from, each once."""
         seen: dict[str, None] = {}
@@ -760,6 +815,8 @@ class SymbolTable:
                 stack.extend(reversed(self.bases(current)))
         return list(seen)
 
+    # Lookup: True if the class or an ancestor inherits from something outside the codebase (so a
+    # missing method may live there).
     def has_outside_base(self, cls: str) -> bool:
         """True if the class or an in-codebase ancestor has a base outside the codebase (or
         one that cannot be placed)."""
@@ -769,6 +826,8 @@ class SymbolTable:
             for resolved in self.written_bases(ancestor)
         )
 
+    # Lookup: the method `name` on a class or, depth first, its bases. Used for self.m(),
+    # super().m() and typed attribute calls.
     def method(self, cls: str, name: str) -> str | None:
         """The function `name` defined on a class or, depth first in base order, its bases."""
         seen: set[str] = set()
@@ -783,6 +842,8 @@ class SymbolTable:
             stack.extend(reversed(self.bases(current)))
         return None
 
+    # Lookup (rule 3): the class of instance attribute self.<name>, from the class or its bases.
+    # Used by _attribute_class.
     def attribute_class(self, cls: str, name: str) -> str | None:
         """The codebase class of instance attribute `name`, from the first of the class and
         its bases (depth first) that types it, or None (DESIGN.md section 9, rule 3)."""
@@ -792,6 +853,8 @@ class SymbolTable:
                 return typed[name]
         return None
 
+    # Helper for attribute_class: the attributes one class types, from property return annotations
+    # and __init__ assignments.
     def _attributes_typed_by(self, cls: str) -> dict[str, str | None]:
         """Attributes one class types, each with its class, or None when it is not exactly one.
 
@@ -820,6 +883,8 @@ class SymbolTable:
         self._typed_attributes[cls] = typed
         return typed
 
+    # Helper for _attributes_typed_by: reads `self.a = ...` assignments in __init__ and records each
+    # attribute's class (None if unclear).
     def _init_attributes(
         self,
         module: ParsedModule,
@@ -837,6 +902,8 @@ class SymbolTable:
             if arg.annotation is not None
         }
 
+        # Inner helper: records one self.a assignment; two assignments that disagree on the class
+        # make it None.
         def record(target: ast.expr, value: ast.expr | None, annotation: ast.expr | None) -> None:
             if isinstance(target, ast.Tuple | ast.List):
                 for element in target.elts:
@@ -869,6 +936,7 @@ class SymbolTable:
                 record(node.target, node.value, node.annotation)
             stack.extend(ast.iter_child_nodes(node))
 
+    # Helper: the codebase class an annotation names (Repo, pkg.Repo or the string 'Repo'), or None.
     def _annotation_class(self, module: ParsedModule, expr: ast.expr | None) -> str | None:
         """The codebase class a name, dotted name or string annotation refers to, or None."""
         if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
@@ -883,6 +951,7 @@ class SymbolTable:
             return None
         return resolved[0]
 
+    # Used by link_imports: where one import points, as (dotted target, is_external).
     def resolve(self, module: ParsedModule, raw: RawImport) -> tuple[str, bool] | None:
         """(dotted target, is_external) for one import, or None if it cannot be placed."""
         base = _absolute(module, raw)
@@ -902,6 +971,8 @@ class SymbolTable:
             return base, True
         return f"{base}.{raw.name}", True
 
+    # Core lookup: what `name` inside module `m` really is, following imports and star re-exports up
+    # to a hop limit.
     def find(self, module: str, name: str, hops: int) -> str | None:
         """Qualname of the module, class or function that `name` in `module` refers to.
 
@@ -932,6 +1003,7 @@ class SymbolTable:
                         return found
         return None
 
+    # Lookup: what a bare name means at module level, as (dotted target, is_external).
     def resolve_name(self, module: ParsedModule, name: str) -> tuple[str, bool] | None:
         """(dotted target, is_external) of a bare name as `module` binds it, or None.
 
@@ -948,6 +1020,8 @@ class SymbolTable:
             return f"builtins.{name}", True
         return None
 
+    # Lookup: what a name, dotted name or subscript (Generic[T] -> Generic) refers to. Used for
+    # bases and by the extractor.
     def resolve_expression(self, module: ParsedModule, expr: ast.expr) -> tuple[str, bool] | None:
         """(dotted target, is_external) of a name, dotted attribute or subscript, or None."""
         if isinstance(expr, ast.Subscript):
@@ -971,6 +1045,7 @@ class SymbolTable:
             dotted = found
         return dotted, False
 
+    # Helper: the target of the name one import binds.
     def resolve_binding(
         self, module: ParsedModule, raw: RawImport, hops: int = 0
     ) -> tuple[str, bool] | None:
@@ -994,6 +1069,8 @@ class SymbolTable:
                     return self.resolve_binding(source, inner, hops + 1)
         return self._outside(f"{base}.{raw.name}")
 
+    # Helper: what a module-level import binds a name to before a given line (a later import of the
+    # same name wins after it).
     def _bound_before(self, module: ParsedModule, name: str, line: int) -> tuple[str, bool] | None:
         """What a module-level import binds `name` to before `line`, or None."""
         for raw in reversed(module.imports):
@@ -1001,6 +1078,7 @@ class SymbolTable:
                 return self.resolve_binding(module, raw)
         return None
 
+    # Helper for resolve: a dotted name find() missed: a walked module, an External, or nothing.
     def _outside(self, dotted: str) -> tuple[str, bool] | None:
         """A dotted name not found by `find`: a walked module, External, or nothing."""
         if dotted in self.modules:
@@ -1009,6 +1087,7 @@ class SymbolTable:
             return None  # inside the codebase but not walked, or not a symbol
         return dotted, True
 
+    # Helper for find: follows one import inside a module to where it leads (one re-export hop).
     def _follow(self, parsed: ParsedModule, raw: RawImport, hops: int) -> str | None:
         """Where one binding import inside `parsed` leads, or None."""
         base = _absolute(parsed, raw)
@@ -1022,6 +1101,7 @@ class SymbolTable:
         return self.find(base, raw.name, hops + 1)
 
 
+# Helper: the local name an import creates (`import a.b as c` -> 'c'); None for a star import.
 def binds(raw: RawImport) -> str | None:
     """The local name an import binds, or None for a star import."""
     if raw.name == "*":
@@ -1033,6 +1113,8 @@ def binds(raw: RawImport) -> str | None:
     return None if raw.module is None else raw.module.split(".")[0]
 
 
+# Helper: turns a relative import (`from ..m import x`) into an absolute module name; None if it
+# climbs above the package.
 def _absolute(module: ParsedModule, raw: RawImport) -> str | None:
     """The absolute dotted module an import refers to, or None if it climbs too high."""
     if raw.level == 0:

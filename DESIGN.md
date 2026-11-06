@@ -253,7 +253,7 @@ Built with FastMCP. All tools are read-only and return Pydantic models, defined 
 
 **Symbol rule:** `symbol` accepts a full qualname or its last dotted segments (`get_one`, `Client.get`); segments match whole, so `Repository` does not match `UserRepository`. An exact qualname wins. If several symbols match, the tool returns `symbol=None` and the candidates (ordered by qualname, at most `limit`, with `truncated`) instead of guessing; if nothing matches, both are empty.
 
-**Arguments and size:** `limit` is 1 to 200 and `depth`/`max_depth` 1 to 5; anything else, or an empty name or query, or a doc query over 500 characters, is a tool error with the reason. Defaults are set so the JSON an agent receives stays under 4 KB per call. This is measured, not guaranteed by the code: it is checked on the fixtures and on Mealie (the largest measured is `check_change` with seven ambiguous short names and one class, about 3.9 KB; `impact_of` on a central class is about 3.7 KB at its default of 8), and a repo with much longer qualnames could exceed it.
+**Arguments and size:** `limit` is 1 to 200 and `depth`/`max_depth` 1 to 5; anything else, or an empty name or query, or a doc query over 500 characters, is a tool error with the reason. Defaults are set so the JSON an agent receives stays under 4 KB per call. This is measured, not guaranteed by the code: it is checked on the fixtures and on Mealie (the largest measured is `impact_of` on a central class, about 3.7 KB at its default of 8), and a repo with much longer qualnames could exceed it.
 
 ```python
 list_codebases() -> CodebaseList
@@ -289,26 +289,14 @@ search_docs(codebase: str, query: str, limit: int = 5) -> DocSearch
     # whole-word match, mentioned symbols; the query is plain text (Lucene
     # syntax is escaped), at most 500 characters
 
-check_change(codebase: str, proposal: ChangeProposal) -> ChangeCheck
-
 module_summary(codebase: str, module: str) -> ModuleSummary    # stretch
     # layer, domain, docstring, classes (bases, method names),
     # functions (signatures), internal imports, imported_by count, docs
 ```
 
-### check_change
+### Before a change: no tool, a workflow (ADR-004)
 
-- `ChangeProposal`: `description: str` (plain text, not empty, at most 500 characters), `symbols: list[str] = []`. Explicit symbols (stripped, empty ones skipped, each at most 200 characters) are preferred; if none, code-shaped names in the description are matched against the graph: a backtick span holding a dotted name (a trailing `()` dropped), and elsewhere dotted names whose segments have two characters or more, names with an inner underscore, dunder names and CamelCase names. File names and hosts (`main.py`, `github.com`) and acronym plurals (`APIs`) are skipped, in backtick spans too. At most 8 names, in order of appearance.
-- `ChangeCheck`: `resolved_symbols`, `ambiguous` (short names matching several symbols, never guessed: at most 3 candidates per name and 8 across all names; a name is never cut to a single candidate, so past that total it is listed with no candidates, for `find_symbol`), `unresolved`, `affected` (dependents counted by layer, None last, from one `impact_of` walk at depth 3 from all resolved symbols), `guidelines: list[Guideline]`, `truncated` (names, candidates or guidelines were cut).
-- `Guideline`: `stance` (`forbids`, `encourages`, `related`), `quote` (one sentence, at most 200 characters, centered on what matched), `citation` (path, heading_path, and the sentence's own start_line and end_line), `matched_on` (`mention`, `search`).
-- **Sentences.** A section body is split into sentences with fenced code skipped and blockquote markers dropped. A blank line, a list item or a table row (a table is found by its separator row) starts a new unit, and a unit is split after `.`, `!` or `?` (possibly inside closing emphasis, a quote, a parenthesis or a bracket) followed by a capital letter or a code span, possibly behind emphasis, a link bracket, a quote or a parenthesis, except after `e.g.` and `i.e.`.
-- **Stance**, on whole words, ignoring case and emphasis markers, in this order: a negated requirement (`don't need to`, `do not need to`, `no need to`, `not required`, `not necessary`) gives `related`; `never`, `do not`, `don't`, `must not`, `should not`, `shouldn't`, `avoid` give `forbids`; `must`, `should`, `always`, `prefer` give `encourages`; anything else is `related`.
-- **mention:** doc sections that MENTION a symbol in the walk (the resolved symbols, their members, their dependents) or a module or class enclosing a resolved symbol (its class, its module and the packages above it, the top-level package excluded). Ranked as `impact_of` ranks docs, with enclosing modules and classes ranked as members. A section gives the sentences that name a mentioned symbol, or, if none does, those with a stance. A class or function is named by its qualname, or by its last dotted segments inside a code span; a module by its qualname or file path, and a package also by its directory, with or without the trailing slash. A bare name must stand alone, not inside a longer name, path or glob.
-- **search:** the description on `doc_text`, top 5 sections; a section gives the sentences sharing a word of four letters or more with the description (not a number or a common English word).
-- Within a section, sentences with a stance are picked first. A sentence found both ways is listed once, as a mention; at most 2 guidelines per section.
-- Order: mention sections by rank, then search sections by score, each section's sentences in line order. When more than 6 remain, those with a stance are kept first, in that order.
-
-Decision (ADR-002): check_change does not call an LLM. Rules come from doc sections found by mention and by search, stance comes from the modal-verb rules above, and the calling agent makes the final judgment. This keeps the server deterministic, testable and cheap, and every claim carries a citation.
+There is no `check_change` tool. The server instructions teach the calling agent the workflow instead: before a change, call `impact_of` on each symbol it will change (what depends on it, and the doc sections that MENTION it), call `search_docs` with a short description of the change (documented rules that name no symbol), Read the cited lines, then judge. Memex finds and cites; the agent decides. No LLM runs inside the server (ADR-002's principle). ADR-004 records why the Phase 6 tool, with its sentence and stance rules, was removed.
 
 ## 11. Folder layout
 
@@ -325,8 +313,7 @@ memex/
   graph/store.py               # Neo4j writes, constraints, indexes
   query/models.py              # Pydantic result models: the tool contract
   query/scope.py               # the scope rule: registered and indexed
-  query/codebases.py symbols.py calls.py impact.py docs.py change.py
-  query/rules.py               # check_change text rules: code names, sentences, stance
+  query/codebases.py symbols.py calls.py impact.py docs.py
   mcp/server.py                # FastMCP tool registration only
   cli.py                       # memex index <codebase> | memex serve | memex stats <codebase>
 scripts/fetch_codebases.py     # clones each external codebase in memex.toml at its ref, verifies commit
@@ -348,7 +335,7 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 
 - **`layered_app` fixture with known answers.** About 15 files of a generic layered web app, built to cover patterns common in real projects rather than any one repo: domain folders whose names differ by layer (`routes/users/` vs `services/user_services/`), a flat folder of per-domain files (`repos/repository_orders.py`), ORM models with `ForeignKey("users.id")` and `relationship("User")`, an underscore-private folder (`_base`), an injected attribute call (`self.repos.orders.get_one()`), a method name that is not unique, and an external base class. Tests assert exact node sets, edges and confidence labels.
 - **`plainrepo` fixture for generality.** Two packages, no rules, no extractors. Tests assert the default layer and domain behavior, and that no REFERENCES edges exist without an extractor enabled. The classifier is tested with and without rules on the same paths.
-- **Doc fixtures.** `tests/fixtures/docs/` holds chunker edge cases with known chunks and line ranges. The `layered_app` docs (an AGENTS.md, a guide and an ADR, each with its own kind) mention its symbols by qualname, path and backticks, next to near-misses that must not link: an ambiguous or common name, a glob, an excluded path, an unknown qualname. `plainrepo` has a README with no `doc_kinds`. `tests/fixtures/docs/rules.md` holds known sentences, line ranges and stances for check_change; its integration tests add doc sections by hand with known forbid, encourage, negated and heading-only rules.
+- **Doc fixtures.** `tests/fixtures/docs/` holds chunker edge cases with known chunks and line ranges. The `layered_app` docs (an AGENTS.md, a guide and an ADR, each with its own kind) mention its symbols by qualname, path and backticks, next to near-misses that must not link: an ambiguous or common name, a glob, an excluded path, an unknown qualname. `plainrepo` has a README with no `doc_kinds`.
 - **Guardrail test** (default run): scans every file in the `memex/` package and fails if the name of any external codebase in `memex.toml` (one with a `source`, so `mealie` and `httpx` but not `memex`) appears in it, case-insensitive, including comments and docstrings.
 - **Unit tests** (no DB, default run, about 2 seconds; the fetch-script tests use real git and take most of it): parser, resolver, extractors, classifier, chunker, mention linker, store rows, CLI.
 - **Integration tests** (`-m neo4j`): store round-trip (Doc nodes and MENTIONS included, plus the `doc_text` full-text index) and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
@@ -356,7 +343,7 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 - **Real-repo smoke tests** (`-m realrepo`, opt-in, need `vendor/` fetched). One test file per benchmark repo; the assertions are about that repo, the code under test is not.
   - Mealie (rules + extractor): zero parse errors; `RecipeModel` present with layer `db_models`, domain `recipe` and incoming REFERENCES; `routes/households/*` classified as layer `routes`, domain `household`; the AGENTS.md rule against editing generated types is a Doc of kind `agents` that MENTIONS resolved symbols; every doc cited in `eval/questions.yaml` is a Doc id.
   - httpx (defaults only): zero parse errors; `Client` and `AsyncClient` found by `find_symbol`; `Client.get` has `Client.request` among its callees; `_transports/asgi.py` gets layer `transports`, domain `asgi`; README and `docs/*.md` indexed with kind `doc`, and `` ## `Client` `` MENTIONS its class; no REFERENCES edges.
-  - Tools on the real repos (`-m "neo4j and realrepo"`, need Docker too): each repo is indexed into the testcontainer and every tool is called through the MCP client. Mealie: `impact_of RecipeModel` finds its REFERENCES dependents in `db_models` and dependents in `repos`; `search_docs` finds the AGENTS.md generated-types rule first; `callers get_one` returns candidates, not a guess; `check_change` on three hand-written proposals (not the eval's) cites the AGENTS.md rules against instantiating `AppSettings()` (by mention) and editing other locales (by search), and the one encouraging `uv` (by search), each with its line; ten shared short names keep to the shared candidate cap; every call stays within the size budget. httpx: `find_symbol` finds `Client` and `AsyncClient` first; `Client.get` is an `exact` caller of `Client.request`; docs are searchable with kind `doc`; `check_change` on `Client.request` resolves it and counts its dependents with defaults only; every call stays within the size budget.
+  - Tools on the real repos (`-m "neo4j and realrepo"`, need Docker too): each repo is indexed into the testcontainer and every tool is called through the MCP client. Mealie: `impact_of RecipeModel` finds its REFERENCES dependents in `db_models` and dependents in `repos`; `search_docs` finds the AGENTS.md generated-types rule first; `callers get_one` returns candidates, not a guess; the AGENTS.md rule against instantiating `AppSettings()` (line 121) is the first doc section of `impact_of AppSettings` and the first hit of `search_docs` on the proposal text, the before-a-change workflow of ADR-004; every call stays within the size budget. httpx: `find_symbol` finds `Client` and `AsyncClient` first; `Client.get` is an `exact` caller of `Client.request`; docs are searchable with kind `doc`; every call stays within the size budget.
 - **Evaluation** runs outside pytest (section 14).
 
 ## 13. v1 limits
@@ -387,19 +374,12 @@ Stated openly:
   - A link URL containing `)` leaves a stray `)`, and emphasis markers that span a code span stay.
   - `*args and **kwargs` loses markers, and backslash escapes and entities are kept as written.
   - A heading with no plain text gets an empty anchor, or ` (2)` after a preamble.
-- Guideline stance comes from modal-verb rules, not semantic understanding.
-- check_change reads doc text by pattern, not by parsing:
-  - HTML comments and indented code are read as prose, so a rule inside them is quoted. So is a fence indented four spaces or more inside a list item (the chunker shares this limit).
-  - A code span in a doc sentence names a symbol only as a whole: `Depends(get_session)` does not name `get_session`.
-  - When a section's mention sits only in a fence, its sentences with a stance are quoted, as for a heading-only mention.
-  - Search matching counts any shared word of four letters or more outside a short stopword list, so generic words (`change`, `code`, `file`) can pick a sentence.
-  - Brand and product names in a description (`OAuth`, `FastAPI`) look like code names and are listed as unresolved.
 
 ## 14. Evaluation
 
-- Runs on Mealie, the primary benchmark: it is large enough (about 415 backend files) that plain file search gets expensive, and it has real contributor rules for check_change. httpx is covered by smoke tests, not the eval.
+- Runs on Mealie, the primary benchmark: it is large enough (about 415 backend files) that plain file search gets expensive, and it has real contributor rules to check a change against. httpx is covered by smoke tests, not the eval.
 - 12 questions with known answers, drafted in Phase 1 before the tools exist so they are not biased toward Memex. Answers come from exploration plus a manual check, never from Memex itself.
-- Categories: 3 locate, 3 callers or dependents, 2 layer or domain, 2 doc rules, 2 check_change.
+- Categories: 3 locate, 3 callers or dependents, 2 layer or domain, 2 doc rules, 2 change questions (category `check_change`, named before ADR-004 removed the tool).
 - Answers are set-valued (symbols, files, doc sections) so grading is deterministic: precision and recall against the expected set.
 - Conditions, same model, prompt and working directory:
   - **A:** `Read`, `Grep`, `Glob` on `vendor/mealie`.
@@ -437,7 +417,7 @@ Estimates include review time and assume phases run one after another.
 | 3. Resolve + extract + store | 3.25 h | Resolver (CALLS with confidence, INHERITS), Extractor Protocol + `sqlalchemy`, Neo4j store, `memex index`, `memex stats`. Freeze schema (ADR-001). | Fixture edge tests green; `plainrepo` has no REFERENCES; integration tests green; Mealie, httpx and Memex indexed; REFERENCES into `RecipeModel` look right; httpx smoke tests green with defaults only; reviewer pass. |
 | 4. Docs (worktree) | 1.5 h | Loader, heading chunker, mention linker, full-text index, ADRs ingested. | Fixture doc tests green; Mealie's AGENTS.md rule about never editing generated types is searchable and MENTIONS resolved symbols; httpx docs are searchable with no `doc_kinds` config. |
 | 5. Query + MCP (main) | 2.5 h | list_codebases, find_symbol, callers, callees, impact_of, search_docs; FastMCP server; `.mcp.json`; minimal README "how to run". | Query and MCP contract tests green; size budgets hold; "what depends on RecipeModel" works in a live Claude Code session, and the same tools answer httpx questions with no code change. |
-| 6. check_change | 1.5 h | Proposal resolution, guideline retrieval, stance, citations; ADR-002. | Fixture tests with known forbid/encourage rules; 3 hand-written Mealie proposals return correct citations. |
+| 6. check_change (removed by ADR-004) | 1.5 h | Proposal resolution, guideline retrieval, stance, citations; ADR-002. | Fixture tests with known forbid/encourage rules; 3 hand-written Mealie proposals return correct citations. |
 | 7. Evaluation | 1.5 h | `eval/run.py`, `eval/grade.py`, results table. | 12 questions x 2 conditions run; raw JSON committed; DEVLOG records scores, tokens and losses honestly. |
 | **Cut line** | **14.5 h** | Everything above is must-have for the demo. | |
 | 8. Polish (stretch) | 0.5 h | README walkthrough, demo script, interview notes. | A fresh clone reaches a working MCP server by following the README. |

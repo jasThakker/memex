@@ -1,6 +1,6 @@
 # ADR-002: check_change finds and labels rules without an LLM
 
-- Status: accepted
+- Status: accepted; the `check_change` tool was removed by ADR-004, and the principle (no LLM in the server) stands
 - Date: 2026-11-05 (Phase 6)
 
 ## Context

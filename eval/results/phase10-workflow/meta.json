@@ -1,0 +1,45 @@
+{
+  "name": "phase10-workflow",
+  "root": "/private/var/folders/0s/pc0t71qn6j53ync66dzflm440000gn/T/eval-phase10-workflow/mealie",
+  "codebase": "mealie",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "runs_per_condition": 1,
+  "max_budget_usd": 2.0,
+  "timeout_s": 900,
+  "codebase_commit": "9552df62118224a377d9c9b0a62706a62220ab86",
+  "invocations": [
+    {
+      "memex_commit": "a793c81d251f0c4f2169e2db75a4fab3257c0eb7-dirty",
+      "claude_version": "2.1.319 (Claude Code)",
+      "argv": [
+        "--name",
+        "phase10-workflow",
+        "--questions",
+        "q11",
+        "q12",
+        "--conditions",
+        "B"
+      ],
+      "started": "2026-11-06T14:44:20Z",
+      "env_removed": [
+        "CLAUDECODE",
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_EXECPATH",
+        "CLAUDE_CODE_HOST_SHORT_TEMP_DIRS",
+        "CLAUDE_CODE_MESSAGING_SOCKET",
+        "CLAUDE_CODE_MESSAGING_TOKEN",
+        "CLAUDE_CODE_SESSION_ATTENDED",
+        "CLAUDE_CODE_SESSION_ID",
+        "CLAUDE_EFFORT",
+        "CLAUDE_JOB_DIR",
+        "CLAUDE_PID"
+      ],
+      "jobs": [
+        "q11-B-1.jsonl",
+        "q12-B-1.jsonl"
+      ]
+    }
+  ]
+}

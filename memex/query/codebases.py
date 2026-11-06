@@ -6,6 +6,8 @@ from memex.config import Registry
 from memex.query.models import CodebaseInfo, CodebaseList, CodebaseStats
 
 
+# Reads one codebase's summary from Neo4j (Codebase node, node counts, edge counts, layer and domain
+# counts). Used by list_codebases and `memex stats`.
 def codebase_stats(driver: Driver, codebase: str) -> CodebaseStats | None:
     """Counts for one indexed codebase, or None if it was never indexed.
 
@@ -60,6 +62,8 @@ def codebase_stats(driver: Driver, codebase: str) -> CodebaseStats | None:
     )
 
 
+# Query for the list_codebases tool: every codebase that is registered and indexed, with its stats
+# (layers and domains left out).
 def list_codebases(driver: Driver, registry: Registry) -> CodebaseList:
     """Every codebase that is both registered and indexed, by name, with node and edge counts
     (no layer or domain counts). One no longer in memex.toml is left out, as every other tool
