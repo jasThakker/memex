@@ -43,6 +43,8 @@ EDGE_KINDS = frozenset(get_args(EdgeKind))
 _EDGE_ENDPOINTS = frozenset({"kind", "source", "target"})
 
 
+# Opens a Neo4j driver from NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD, defaulting to the
+# docker-compose dev database. Called by the CLI for index, stats and serve.
 def connect() -> Driver:
     """A driver for the dev database: NEO4J_URI, NEO4J_USER and NEO4J_PASSWORD, with the
     defaults of docker-compose.yml."""
@@ -52,6 +54,8 @@ def connect() -> Driver:
     return GraphDatabase.driver(uri, auth=(user, password))
 
 
+# Creates the unique-id constraints, the lookup indexes and the doc_text full-text index if missing,
+# then waits for them. Safe to run before every index.
 def ensure_schema(driver: Driver) -> None:
     """Create the constraints and indexes if they are missing. Safe to run every time."""
     statements = [
@@ -73,6 +77,8 @@ def ensure_schema(driver: Driver) -> None:
     driver.execute_query("CALL db.awaitIndexes()")
 
 
+# Write path entry point (called by cli._index): validates the batch, then runs _replace in ONE
+# managed write transaction, so a failure keeps the old graph.
 def replace_codebase(driver: Driver, batch: GraphBatch) -> None:
     """Replace everything stored for `batch.codebase` with the batch, atomically."""
     validate(batch)
@@ -80,6 +86,8 @@ def replace_codebase(driver: Driver, batch: GraphBatch) -> None:
         session.execute_write(_replace, batch)
 
 
+# Safety check before writing: no duplicate ids, all nodes from this codebase, exactly one Codebase
+# node, known edge kinds, and no edge pointing at a missing node.
 def validate(batch: GraphBatch) -> None:
     """Raise ValueError for a batch the store must not write."""
     counts = Counter(node.id for node in batch.nodes)
@@ -112,14 +120,20 @@ def validate(batch: GraphBatch) -> None:
         raise ValueError(f"{len(dangling)} dangling edges, for example {dangling[0]}")
 
 
+# Small helper: the Neo4j label for a node dataclass (FunctionNode -> 'Function'). Used by _replace
+# and by cli.stats_from_batch.
 def label_of(node: Node) -> str:
     return LABELS[type(node)]
 
 
+# Helper for _replace: turns a node dataclass into the dict of properties Neo4j stores, leaving out
+# None values.
 def node_properties(node: Node) -> dict[str, Any]:
     return {key: _value(value) for key, value in asdict(node).items() if value is not None}
 
 
+# Helper for _replace: the properties an edge stores (line, confidence, attr...), skipping
+# kind/source/target and empty fields; ref_kind is stored as 'kind'.
 def edge_properties(edge: Edge) -> dict[str, Any]:
     """The properties an edge's kind uses: set fields other than kind, source and target."""
     properties: dict[str, Any] = {}
@@ -131,10 +145,13 @@ def edge_properties(edge: Edge) -> dict[str, Any]:
     return properties
 
 
+# Tiny helper: Neo4j cannot store tuples, so tuples become lists.
 def _value(value: Any) -> Any:
     return list(value) if isinstance(value, tuple) else value
 
 
+# The actual write, run inside the transaction tx: DETACH DELETE the old graph of this codebase,
+# then CREATE nodes per label and edges per (kind, labels), 1,000 rows at a time with UNWIND.
 def _replace(tx: ManagedTransaction, batch: GraphBatch) -> None:
     for label in LABELS.values():
         tx.run(
@@ -166,5 +183,6 @@ def _replace(tx: ManagedTransaction, batch: GraphBatch) -> None:
             )
 
 
+# Helper for _replace: splits rows into batches of BATCH_SIZE (1,000).
 def _chunks(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     return [rows[start : start + BATCH_SIZE] for start in range(0, len(rows), BATCH_SIZE)]

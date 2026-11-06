@@ -48,6 +48,8 @@ _DOCS = (
 )
 
 
+# Query for the impact_of tool: resolve_symbol -> start_set -> walk -> _docs -> _by_layer. Returns
+# the Impact model.
 def impact_of(
     driver: Driver, codebase: str, symbol: str, max_depth: int = 3, limit: int = 8
 ) -> Impact:
@@ -78,12 +80,15 @@ def impact_of(
     )
 
 
+# Helper for impact_of: the symbol plus everything it DEFINES (a class and all its methods), as ids.
 def start_set(driver: Driver, node_id: str) -> list[str]:
     """The ids of a Module, Class or Function and of everything it DEFINES, transitively."""
     rows, _, _ = driver.execute_query(_START_SET, id=node_id, routing_=RoutingControl.READ)
     return [row["id"] for row in rows]
 
 
+# The core BFS: level by level, backwards over CALLS, INHERITS, REFERENCES, IMPORTS and USES; each
+# node once at its shortest distance; modules and REFERENCES-reached classes are leaves.
 def walk(
     driver: Driver, start_ids: list[str], max_depth: int
 ) -> tuple[dict[str, int], list[Dependent]]:
@@ -122,6 +127,7 @@ def walk(
     return distance, found
 
 
+# Helper for impact_of: groups the kept dependents by layer, None last.
 def _by_layer(dependents: list[Dependent]) -> list[LayerGroup]:
     """Groups by layer name, None last; `dependents` is already in (distance, qualname) order."""
     grouped: dict[str | None, list[Dependent]] = defaultdict(list)
@@ -131,6 +137,8 @@ def _by_layer(dependents: list[Dependent]) -> list[LayerGroup]:
     return [LayerGroup(layer=layer, dependents=grouped[layer]) for layer in order]
 
 
+# Helper for impact_of: up to 5 doc sections that MENTION the symbol or a dependent, those about the
+# symbol itself first.
 def _docs(
     driver: Driver, codebase: str, symbol_id: str, distance: dict[str, int]
 ) -> tuple[list[DocRef], bool]:
@@ -139,6 +147,8 @@ def _docs(
         _DOCS, codebase=codebase, ids=list(distance), routing_=RoutingControl.READ
     )
 
+    # Inner sort key: 0 for a section on the symbol, 1 for one on its members, 1 + distance for one
+    # on a dependent; then path and line.
     def rank(row: dict[str, Any]) -> tuple[int, str, int]:
         ids = [node_id for node_id, _ in row["mentions"]]
         # 0: the symbol itself, 1: a member of the start set, 1 + d: a dependent at distance d

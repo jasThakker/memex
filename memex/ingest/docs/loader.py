@@ -25,6 +25,8 @@ class DocFile:
     text: str
 
 
+# Helper for index_docs: reads every doc file matched by the `docs` globs; an unreadable or
+# non-UTF-8 file becomes a ParseError, not a crash.
 def load_docs(codebase: Codebase) -> tuple[list[DocFile], list[ParseError]]:
     """Every doc file with its kind and text, plus a ParseError for each unreadable one."""
     files: list[DocFile] = []
@@ -43,6 +45,8 @@ def load_docs(codebase: Codebase) -> tuple[list[DocFile], list[ParseError]]:
     return files, errors
 
 
+# Helper for load_docs: the file's kind from the `doc_kinds` globs (e.g. 'agents', 'adr'), else the
+# default.
 def doc_kind(codebase: Codebase, path: str) -> str:
     relative = PurePosixPath(path)
     for pattern, kind in codebase.doc_kinds.items():
@@ -51,6 +55,8 @@ def doc_kind(codebase: Codebase, path: str) -> str:
     return DEFAULT_KIND
 
 
+# Helper for load_docs: expands the `docs` globs into .md paths, rejecting globs that escape the
+# codebase root.
 def _doc_paths(codebase: Codebase) -> list[str]:
     paths: set[str] = set()
     for pattern in codebase.docs:

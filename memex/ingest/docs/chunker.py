@@ -56,12 +56,15 @@ class _Heading:
     raw: str
 
 
+# Helper: splits text into lines exactly as an editor numbers them, so cited line numbers are right.
 def split_lines(text: str) -> list[str]:
     """Lines as an editor numbers them: only `\n`, `\r\n` and `\r` end a line."""
     lines = _NEWLINE.split(text)
     return lines[:-1] if lines[-1] == "" else lines
 
 
+# Splits one Markdown file into sections at its headings; each Chunk has its heading path ('A > B >
+# C'), a unique anchor, its text and exact line range.
 def chunk(text: str) -> list[Chunk]:
     lines = split_lines(text)
     start = _body_start(lines)
@@ -92,6 +95,7 @@ def chunk(text: str) -> list[Chunk]:
     return chunks
 
 
+# Helper for chunk: heading text as a reader sees it (links, code and emphasis markers removed).
 def plain_heading(raw: str) -> str:
     """Heading text as a reader sees it: `[text](url)` gives `text`, code and emphasis
     markers are dropped (code span content stays literal), whitespace is collapsed."""
@@ -107,6 +111,8 @@ def plain_heading(raw: str) -> str:
     return " ".join("".join(parts).split())
 
 
+# Helper: the text with fenced code blocks blanked out (lines kept, so numbering holds). Used by
+# mentions.py.
 def outside_fences(text: str) -> str:
     """The text with every line of fenced code, fence lines included, blanked out."""
     kept: list[str] = []
@@ -124,6 +130,7 @@ def outside_fences(text: str) -> str:
     return "\n".join(kept)
 
 
+# Helper: True if a line closes the current ``` or ~~~ code fence.
 def _closes(fence: str, line: str) -> bool:
     """A closing fence: at most 3 spaces of indent, at least as many of the same character,
     and nothing else."""
@@ -131,6 +138,8 @@ def _closes(fence: str, line: str) -> bool:
     return _indent(line) <= 3 and stripped.startswith(fence) and set(stripped) == {fence[0]}
 
 
+# Helper for plain_heading: strips links, inline HTML and emphasis from heading text outside code
+# spans.
 def _prose(text: str) -> str:
     """Heading text outside code spans: shortcut links and inline HTML reduced, emphasis
     markers dropped."""
@@ -140,6 +149,7 @@ def _prose(text: str) -> str:
     return text
 
 
+# Helper for chunk: skips YAML front matter at the top of a file.
 def _body_start(lines: list[str]) -> int:
     """Index of the first line after YAML front matter, or 0 when there is none."""
     if not lines or lines[0].strip() != "---":
@@ -150,6 +160,8 @@ def _body_start(lines: list[str]) -> int:
     return 0  # never closed: not front matter
 
 
+# Helper for chunk: finds every heading (# style and underlined style), ignoring code fences, HTML
+# comments and indented code.
 def _headings(lines: list[str], start: int) -> list[_Heading]:
     headings: list[_Heading] = []
     fence: str | None = None
@@ -201,17 +213,20 @@ def _headings(lines: list[str], start: int) -> list[_Heading]:
     return headings
 
 
+# Helper: how many spaces a line is indented (tabs count as 4).
 def _indent(line: str) -> int:
     expanded = line.expandtabs(4)
     return len(expanded) - len(expanded.lstrip(" "))
 
 
+# Helper for chunk: first and last non-blank line in a range, or None.
 def _trimmed(lines: list[str], start: int, end: int) -> tuple[int, int] | None:
     """First and last non-blank line indexes in lines[start:end], or None if all blank."""
     filled = [index for index in range(start, end) if lines[index].strip()]
     return (filled[0], filled[-1]) if filled else None
 
 
+# Helper for chunk: builds one Chunk with 1-based line numbers.
 def _chunk(
     anchor: str, path: str, lines: list[str], start: int, end: int, first: int, last: int
 ) -> Chunk:
@@ -224,6 +239,7 @@ def _chunk(
     )
 
 
+# Helper for chunk: makes repeated heading anchors unique ('Setup (2)').
 def _unique(anchor: str, used: set[str]) -> str:
     if anchor not in used:
         return anchor

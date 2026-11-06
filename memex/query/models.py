@@ -171,50 +171,6 @@ class DocSearch(Contract):
     truncated: bool = False
 
 
-# check_change
-
-
-class ChangeProposal(Contract):
-    """Input. Explicit symbols are preferred; if empty, the description is matched."""
-
-    description: str
-    symbols: list[str] = []
-
-
-class LayerCount(Contract):
-    layer: str | None
-    count: int
-
-
-class ImpactSummary(Contract):
-    total: int
-    layers: list[LayerCount]
-
-
-class Guideline(Contract):
-    stance: Literal["forbids", "encourages", "related"]
-    quote: str  # the sentence
-    citation: Citation
-    matched_on: Literal["mention", "search"]
-
-
-class AmbiguousName(Contract):
-    """A short name in a proposal that matches more than one symbol."""
-
-    name: str
-    candidates: list[SymbolRef]
-
-
-class ChangeCheck(Contract):
-    codebase: str
-    resolved_symbols: list[SymbolRef]
-    ambiguous: list[AmbiguousName] = []  # never guessed: the caller picks
-    unresolved: list[str]
-    affected: ImpactSummary
-    guidelines: list[Guideline]
-    truncated: bool = False
-
-
 # module_summary (stretch)
 
 

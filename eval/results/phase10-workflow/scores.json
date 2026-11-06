@@ -1,0 +1,148 @@
+{
+  "summary": {
+    "B": {
+      "runs": 2,
+      "invalid": 0,
+      "answered": 2,
+      "errors": 0,
+      "precision": 0.5076923076923077,
+      "recall": 0.7922077922077921,
+      "f1": 0.6060606060606062,
+      "by_category": {
+        "check_change": {
+          "precision": 0.5076923076923077,
+          "recall": 0.7922077922077921,
+          "f1": 0.6060606060606062
+        }
+      },
+      "usage": {
+        "input_tokens": 26,
+        "output_tokens": 6324,
+        "cache_creation_tokens": 46159,
+        "cache_read_tokens": 179725,
+        "total_input": 225910,
+        "cost_usd": 0.265901,
+        "turns": 30,
+        "duration_ms": 61460
+      },
+      "estimated_usage": 0
+    }
+  },
+  "baselines": {},
+  "runs": [
+    {
+      "id": "q11",
+      "category": "check_change",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.625,
+        "recall": 0.8333333333333334,
+        "f1": 0.7142857142857143
+      },
+      "docs": {
+        "precision": 0.6,
+        "recall": 0.6,
+        "f1": 0.6
+      },
+      "combined": {
+        "precision": 0.6153846153846154,
+        "recall": 0.7272727272727273,
+        "f1": 0.6666666666666667
+      },
+      "missed": [
+        "docs/docs/contributors/developers-guide/code-contributions.md#We Use GitHub Flow, So All Code Changes Happen Through Pull Requests",
+        "docs/docs/contributors/developers-guide/database-changes.md#Overview",
+        "mealie.schema.group.ai_providers.AIProviderCreate.validate_as_none"
+      ],
+      "extra": [
+        "AGENTS.md#Common Gotchas",
+        "docs/docs/documentation/getting-started/installation/ai-providers.md#Configuration",
+        "mealie.repos.repository_ai_provider.GroupRepositoryAIProvider",
+        "mealie.schema.group.ai_providers.AIProviderOut",
+        "mealie.services.openai.openai.OpenAIService.test_connection"
+      ],
+      "usage": {
+        "input_tokens": 18,
+        "output_tokens": 4015,
+        "cache_creation_tokens": 36662,
+        "cache_read_tokens": 149676,
+        "total_input": 186356,
+        "cost_usd": 0.201802,
+        "turns": 20,
+        "duration_ms": 46865
+      },
+      "tool_calls": {
+        "Read": 8,
+        "mcp__memex__callers": 1,
+        "mcp__memex__find_symbol": 5,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 3
+      }
+    },
+    {
+      "id": "q12",
+      "category": "check_change",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.45454545454545453,
+        "recall": 1.0,
+        "f1": 0.625
+      },
+      "docs": {
+        "precision": 0.25,
+        "recall": 0.5,
+        "f1": 0.3333333333333333
+      },
+      "combined": {
+        "precision": 0.4,
+        "recall": 0.8571428571428571,
+        "f1": 0.5454545454545455
+      },
+      "missed": [
+        "AGENTS.md#Cross-Cutting Concerns"
+      ],
+      "extra": [
+        "docs/docs/contributors/guides/ingredient-parser.md#Improving The CRF Parser",
+        "docs/docs/contributors/guides/ingredient-parser.md#Improving the Ingredient Parser",
+        "docs/docs/documentation/getting-started/installation/ai-providers.md#AI Features",
+        "mealie.schema.recipe.recipe_ingredient.IngredientRequest",
+        "mealie.schema.recipe.recipe_ingredient.IngredientsRequest",
+        "mealie.services.parser_services.ingredient_parser",
+        "mealie.services.parser_services.ingredient_parser.BruteForceParser",
+        "mealie.services.parser_services.ingredient_parser.NLPParser",
+        "mealie.services.parser_services.openai.parser.OpenAIParser"
+      ],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 2309,
+        "cache_creation_tokens": 9497,
+        "cache_read_tokens": 30049,
+        "total_input": 39554,
+        "cost_usd": 0.064099,
+        "turns": 10,
+        "duration_ms": 14595
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__callers": 1,
+        "mcp__memex__find_symbol": 2,
+        "mcp__memex__impact_of": 2,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    }
+  ]
+}

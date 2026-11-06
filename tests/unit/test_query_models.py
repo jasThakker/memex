@@ -91,21 +91,6 @@ CONTRACT: dict[type[BaseModel], set[str]] = {
         "score",
     },
     m.DocSearch: {"codebase", "query", "hits", "truncated"},
-    # check_change
-    m.ChangeProposal: {"description", "symbols"},
-    m.LayerCount: {"layer", "count"},
-    m.ImpactSummary: {"total", "layers"},
-    m.Guideline: {"stance", "quote", "citation", "matched_on"},
-    m.AmbiguousName: {"name", "candidates"},
-    m.ChangeCheck: {
-        "codebase",
-        "resolved_symbols",
-        "ambiguous",
-        "unresolved",
-        "affected",
-        "guidelines",
-        "truncated",
-    },
     # module_summary (stretch; in the contract now so it needs no ADR later)
     m.ClassSummary: {"name", "line", "bases", "methods"},
     m.FunctionSummary: {"name", "line", "signature"},
@@ -129,7 +114,6 @@ TOOL_RESULTS = [
     m.CallGraph,
     m.Impact,
     m.DocSearch,
-    m.ChangeCheck,
     m.ModuleSummary,
 ]
 
@@ -148,9 +132,6 @@ SERVICE = m.SymbolRef(
     line=40,
     layer="services",
     domain="recipe",
-)
-CITATION = m.Citation(
-    path="AGENTS.md", heading_path="Rules > Generated code", start_line=10, end_line=14
 )
 
 
@@ -193,8 +174,6 @@ def test_literal_fields_reject_values_outside_the_contract() -> None:
         m.CallHop(function=SERVICE, via="x", line=1, confidence="maybe", distance=1)
     with pytest.raises(ValidationError):
         m.PathStep(edge="DEFINES", to="x")  # impact follows CALLS, INHERITS, REFERENCES, IMPORTS
-    with pytest.raises(ValidationError):
-        m.Guideline(stance="likes", quote="q", citation=CITATION, matched_on="search")
 
 
 EXAMPLES: list[BaseModel] = [
@@ -284,31 +263,6 @@ EXAMPLES: list[BaseModel] = [
             )
         ],
     ),
-    m.ChangeCheck(
-        codebase="shop",
-        resolved_symbols=[RECIPE],
-        ambiguous=[
-            m.AmbiguousName(
-                name="create",
-                candidates=[
-                    SERVICE,
-                    SERVICE.model_copy(
-                        update={"qualname": "app.services.user_service.UserService.create"}
-                    ),
-                ],
-            )
-        ],
-        unresolved=["RecipeThing"],
-        affected=m.ImpactSummary(total=4, layers=[m.LayerCount(layer=None, count=4)]),
-        guidelines=[
-            m.Guideline(
-                stance="forbids",
-                quote="Never edit generated types by hand.",
-                citation=CITATION,
-                matched_on="mention",
-            )
-        ],
-    ),
     m.ModuleSummary(
         codebase="shop",
         module=RECIPE.model_copy(update={"kind": "module", "line": None}),
@@ -324,10 +278,6 @@ EXAMPLES: list[BaseModel] = [
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda example: type(example).__name__)
 def test_examples_round_trip_through_json(example: BaseModel) -> None:
     assert type(example).model_validate_json(example.model_dump_json()) == example
-
-
-def test_change_proposal_symbols_default_to_empty() -> None:
-    assert m.ChangeProposal(description="Rename RecipeModel.slug").symbols == []
 
 
 SCHEMA_SNAPSHOT = Path(__file__).with_name("contract_schema.json")

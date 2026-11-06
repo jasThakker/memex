@@ -17,16 +17,22 @@ Confidence = Literal["exact", "inferred", "ambiguous"]
 MentionMatch = Literal["qualname", "path", "backtick_name"]
 
 
+# Builds the id of a Module, Class or Function node: '<codebase>:<qualname>'. Used by ingest to
+# create ids and by query to look nodes up, so both sides agree.
 def code_id(codebase: str, qualname: str) -> str:
     """Id of a Module, Class or Function node."""
     return f"{codebase}:{qualname}"
 
 
+# Builds the id of an External node (a name from outside the codebase, like json.dumps):
+# '<codebase>:ext:<dotted>'. Used by the resolver.
 def external_id(codebase: str, dotted: str) -> str:
     """Id of an External node: a name imported or inherited from outside the codebase."""
     return f"{codebase}:ext:{dotted}"
 
 
+# Builds the id of a Doc node (one heading section of a Markdown file):
+# '<codebase>:doc:<path>#<anchor>'. Used by index_docs.
 def doc_id(codebase: str, path: str, anchor: str) -> str:
     """Id of a Doc node: one heading-delimited chunk of a Markdown file."""
     return f"{codebase}:doc:{path}#{anchor}"

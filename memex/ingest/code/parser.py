@@ -47,6 +47,9 @@ class ParsedModule:
     definitions: dict[str, Definition] = field(default_factory=dict)  # qualname -> its AST
 
 
+# Parse stage of indexing: parses one file with `ast` into Module/Class/Function nodes, DEFINES
+# edges and raw imports. A syntax error returns a ParseError, never raises. Called once per file by
+# index_code.
 def parse_module(codebase: str, source: SourceFile, data: bytes) -> ParsedModule | ParseError:
     """Parse one file's bytes. A file `ast` cannot parse gives a ParseError, never an exception.
 
@@ -83,6 +86,8 @@ def parse_module(codebase: str, source: SourceFile, data: bytes) -> ParsedModule
 class _Collector:
     """Walks module and class bodies, creating nodes and DEFINES edges."""
 
+    # Sets up the per-file state: nodes so far (starting with the module), DEFINES edges, overload
+    # stubs and each definition's ast node.
     def __init__(self, codebase: str, path: str, module: ModuleNode) -> None:
         self.codebase = codebase
         self.path = path
@@ -91,6 +96,8 @@ class _Collector:
         self.overload_stubs: set[str] = set()
         self.definitions: dict[str, Definition] = {}
 
+    # Walks a module or class body: classes and functions get nodes; other statements (if, try,
+    # with...) are searched for definitions nested inside them.
     def visit_body(self, body: list[ast.stmt], parent: ModuleNode | ClassNode) -> None:
         for statement in body:
             match statement:
@@ -102,6 +109,8 @@ class _Collector:
                     for block in _blocks(statement):
                         self.visit_body(block, parent)
 
+    # Helper for visit_body: creates a ClassNode, then visits the class body so its methods become
+    # nodes too.
     def _add_class(self, node: ast.ClassDef, parent: ModuleNode | ClassNode) -> None:
         qualname = f"{parent.qualname}.{node.name}"
         if qualname in self.nodes:
@@ -120,6 +129,8 @@ class _Collector:
         self.definitions[qualname] = node
         self.visit_body(node.body, cls)
 
+    # Helper for visit_body: creates a FunctionNode with its signature and docstring line; an
+    # @overload stub is replaced by the real definition.
     def _add_function(
         self, node: ast.FunctionDef | ast.AsyncFunctionDef, parent: ModuleNode | ClassNode
     ) -> None:
@@ -149,11 +160,14 @@ class _Collector:
         else:
             self.overload_stubs.discard(qualname)
 
+    # Helper: stores a node and adds the DEFINES edge from its parent.
     def _add(self, node: ClassNode | FunctionNode, parent: ModuleNode | ClassNode) -> None:
         self.nodes[node.qualname] = node
         self.defines.append(Edge(kind="DEFINES", source=parent.id, target=node.id))
 
 
+# Helper for visit_body: the statement lists nested inside a compound statement (if/else,
+# try/except, with, for...), so definitions there are found.
 def _blocks(statement: ast.stmt) -> list[list[ast.stmt]]:
     """Statement lists nested in a compound statement, in source order."""
     blocks: list[list[ast.stmt]] = [getattr(statement, "body", [])]
@@ -166,6 +180,8 @@ def _blocks(statement: ast.stmt) -> list[list[ast.stmt]]:
 _SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
 
 
+# Helper for parse_module: every import statement as a RawImport (text as written, resolved later in
+# step 4). Iterative, so deep code does not recurse.
 def _imports(tree: ast.Module) -> tuple[RawImport, ...]:
     """Every import statement, in source order. Iterative: deep expressions must not recurse."""
     statements: list[tuple[ast.Import | ast.ImportFrom, bool]] = []
@@ -208,6 +224,7 @@ def _imports(tree: ast.Module) -> tuple[RawImport, ...]:
     return tuple(found)
 
 
+# Helper for _add_function: True for a function decorated with @overload or @typing.overload.
 def _is_overload(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """True for `@overload` and `@typing.overload` (or any `@<module>.overload`)."""
     return any(
@@ -217,6 +234,8 @@ def _is_overload(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     )
 
 
+# Helper for _add_function: 'name(args) -> return' as text, via ast.unparse; falls back to
+# 'name(...)' if a default is too deeply nested.
 def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     try:
         signature = f"{node.name}({ast.unparse(node.args)})"
@@ -227,6 +246,8 @@ def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return signature
 
 
+# Helper: the first non-blank docstring line of a module, class or function, or None. Stored on the
+# node for find_symbol results.
 def _first_docstring_line(
     node: ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> str | None:

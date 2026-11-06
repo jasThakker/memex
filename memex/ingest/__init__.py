@@ -8,6 +8,8 @@ from memex.ingest.code import index_code
 from memex.ingest.docs import index_docs
 
 
+# Ingest entry point (called by cli._index): runs index_code (steps 1 to 5), then index_docs (step
+# 6), and merges both into one GraphBatch.
 def index_codebase(codebase: Codebase) -> GraphBatch:
     """The whole codebase in one batch: code first, then the Doc nodes and the MENTIONS edges
     from them to that code. Doc parse errors follow the code parse errors in the stats, and

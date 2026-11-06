@@ -32,6 +32,8 @@ _RANKED = (
 )
 
 
+# The symbol rule, shared by callers, callees and impact_of: exact qualname or qualname ending
+# in '.<name>'. One match -> resolved; several -> None + candidates. Never guesses.
 def resolve_symbol(
     driver: Driver, codebase: str, symbol: str, limit: int = MAX_LIMIT
 ) -> tuple[SymbolRef | None, list[SymbolRef], bool]:
@@ -65,6 +67,8 @@ def resolve_symbol(
     return None, refs[:limit], len(refs) > limit
 
 
+# Query for the find_symbol tool: a ranked search (exact, then suffix, then contains), returning a
+# list. Does not use resolve_symbol.
 def find_symbol(
     driver: Driver,
     codebase: str,
@@ -100,11 +104,14 @@ def find_symbol(
     )
 
 
+# Helper: rejects a limit outside 1 to 200 with a ValueError.
 def check_limit(limit: int, name: str = "limit") -> None:
     if not 1 <= limit <= MAX_LIMIT:
         raise ValueError(f"{name} must be between 1 and {MAX_LIMIT}, got {limit}")
 
 
+# Helper: builds a compact SymbolRef (qualname, kind, path, line, layer, domain) from a node's
+# stored properties. Used by most tools.
 def symbol_ref(label: str, props: dict[str, Any]) -> SymbolRef:
     """A SymbolRef from a stored Module, Class or Function node."""
     return SymbolRef(
@@ -117,6 +124,7 @@ def symbol_ref(label: str, props: dict[str, Any]) -> SymbolRef:
     )
 
 
+# Helper for find_symbol: a SymbolRef plus signature and docstring line.
 def full_symbol(label: str, props: dict[str, Any]) -> Symbol:
     return Symbol(
         **symbol_ref(label, props).model_dump(),

@@ -38,6 +38,8 @@ _COMMON_NAMES = frozenset(
 class MentionTargets:
     """Lookups from qualname, path, short name and dotted suffix to code node ids."""
 
+    # Builds the lookups mentions are matched against: by qualname, by file path, by bare name, and
+    # by dotted suffix (Class.method).
     def __init__(self, code_nodes: Sequence[Node]) -> None:
         self.by_qualname: dict[str, str] = {}
         self.by_path: dict[str, str] = {}
@@ -56,10 +58,14 @@ class MentionTargets:
                     self.by_suffix[".".join(parts[start:])].add(node.id)
 
 
+# Docs stage of indexing: the MENTIONS edges from one doc section to every code symbol it names
+# (qualname, path or backticked name), keeping the strongest match per target.
 def link_mentions(source: str, text: str, targets: MentionTargets) -> list[Edge]:
     """MENTIONS edges from the Doc `source` for everything `text` names, sorted by target."""
     best: dict[str, MentionMatch] = {}
 
+    # Inner helper: records a match, replacing a weaker one for the same target (qualname beats path
+    # beats backtick name).
     def found(target: str | None, match: MentionMatch) -> None:
         if target is not None and (target not in best or _RANK[match] < _RANK[best[target]]):
             best[target] = match
@@ -76,6 +82,7 @@ def link_mentions(source: str, text: str, targets: MentionTargets) -> list[Edge]
     ]
 
 
+# Helper for link_mentions: the module a path like pkg/mod.py or pkg/sub/ names; globs are skipped.
 def _path_target(token: str, targets: MentionTargets) -> str | None:
     if "*" in token or "?" in token:
         return None
@@ -85,6 +92,8 @@ def _path_target(token: str, targets: MentionTargets) -> str | None:
     return targets.by_path.get(f"{path}/__init__.py")
 
 
+# Helper for link_mentions: the symbol a backticked name names, only if exactly one matches and it
+# is not a builtin, keyword or dunder.
 def _name_target(span: str, targets: MentionTargets) -> str | None:
     name = span.strip().removesuffix("()")
     if not _NAME.fullmatch(name):

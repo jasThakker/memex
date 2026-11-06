@@ -17,6 +17,8 @@ class DocIndex:
     parse_errors: tuple[ParseError, ...] = ()
 
 
+# Docs stage of indexing: loads the doc files, splits each into heading sections (DocNodes) and adds
+# MENTIONS edges to the code each section names. Called by index_codebase.
 def index_docs(codebase: Codebase, code_nodes: Sequence[Node]) -> DocIndex:
     """One Doc node per heading chunk of every doc file, in path order, then file order, and
     the MENTIONS edges from each chunk to the `code_nodes` it names. Mentions are read from

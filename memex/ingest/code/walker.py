@@ -22,6 +22,8 @@ class SourceFile:
     package: str  # the `packages` entry this file belongs to
 
 
+# Walk stage of indexing: lists every importable .py file under the codebase's packages, minus
+# `exclude` globs, each with its module qualname. Called by index_code.
 def walk(codebase: Codebase) -> list[SourceFile]:
     """Every .py file under the codebase's packages, minus `exclude`, sorted by path.
 
@@ -47,6 +49,8 @@ def walk(codebase: Codebase) -> list[SourceFile]:
     return sorted(files, key=lambda file: file.path)
 
 
+# Helper for walk: each package exists, packages do not overlap, and no two share a name. Raises
+# WalkerError (CLI exit code 2).
 def _check_packages(codebase: Codebase) -> None:
     """Every package is a directory, no package lies inside another, and names are unique."""
     seen: dict[PurePosixPath, str] = {}
@@ -70,14 +74,19 @@ def _check_packages(codebase: Codebase) -> None:
         seen[path] = package
 
 
+# Helper for walk: True if the path matches any `exclude` glob.
 def _is_excluded(path: PurePosixPath, patterns: tuple[str, ...]) -> bool:
     return any(path.full_match(pattern) for pattern in patterns)
 
 
+# Helper for walk: True if every folder and file name is a Python identifier (`my-dir/` or
+# `foo.bar.py` cannot be imported, so they are skipped).
 def _is_importable(relative: Path) -> bool:
     return all(part.isidentifier() for part in relative.with_suffix("").parts)
 
 
+# Helper for walk: file path to module qualname (pkg/routes/users.py -> pkg.routes.users; a
+# package's __init__.py -> the package).
 def _qualname(package_name: str, relative: Path) -> str:
     parts = relative.with_suffix("").parts
     if parts[-1] == "__init__":
