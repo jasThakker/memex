@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memex Observatory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/force-graph@1.43.5/dist/force-graph.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #06070b;
+    --bg-2: #0b0e15;
+    --ink: #ece6d6;
+    --ink-2: #b9b3a2;
+    --muted: #77735f;
+    --hair: rgba(236, 230, 214, 0.09);
+    --hair-2: rgba(236, 230, 214, 0.16);
+    --panel: rgba(10, 12, 18, 0.66);
+    --amber: #ffc861;
+    --amber-soft: rgba(255, 200, 97, 0.16);
+    --teal: #7fe0d0;
+    --rose: #ff8f7a;
+    --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --sans: "Geist", ui-sans-serif, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+    --radius: 12px;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(1200px 800px at 62% 38%, #121827 0%, transparent 60%),
+      radial-gradient(900px 700px at 15% 85%, #1a1220 0%, transparent 55%),
+      var(--bg);
+    color: var(--ink);
+    font: 400 13px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--amber); color: #120d02; }
+
+  /* ---------- the sky ---------- */
+  #graph { position: fixed; inset: 0; cursor: crosshair; }
+  #graph.grab { cursor: grab; }
+  .chart-rings {
+    position: fixed; inset: 0; pointer-events: none; opacity: .5;
+    background:
+      repeating-radial-gradient(circle at 50% 46%, transparent 0 139px, rgba(236,230,214,.035) 139px 140px),
+      linear-gradient(transparent 49.95%, rgba(236,230,214,.035) 50%, transparent 50.05%),
+      linear-gradient(90deg, transparent 49.97%, rgba(236,230,214,.035) 50%, transparent 50.03%);
+    mask-image: radial-gradient(circle at 50% 46%, #000 0%, transparent 70%);
+  }
+  .grain {
+    position: fixed; inset: -50%; pointer-events: none; opacity: .07; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    animation: drift 9s steps(6) infinite;
+  }
+  @keyframes drift { 0%{transform:translate(0,0)} 50%{transform:translate(-3%,2%)} 100%{transform:translate(0,0)} }
+  .vignette { position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.65) 100%); }
+
+  /* ---------- panels ---------- */
+  .panel {
+    position: fixed; background: var(--panel);
+    backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--hair); border-radius: var(--radius);
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.03);
+    opacity: 0; transform: translateY(8px);
+    animation: rise .9s var(--ease) forwards;
+  }
+  .panel::before, .panel::after {  /* instrument corner ticks */
+    content: ""; position: absolute; width: 9px; height: 9px; pointer-events: none;
+    border-color: var(--hair-2); border-style: solid;
+  }
+  .panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-top-left-radius: var(--radius); }
+  .panel::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; border-bottom-right-radius: var(--radius); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .eyebrow {
+    font: 500 10px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+  }
+  .hairline { height: 1px; background: var(--hair); margin: 12px 0; }
+
+  /* masthead */
+  .masthead { top: 18px; left: 18px; padding: 16px 18px 14px; width: 272px; animation-delay: .15s; }
+  .wordmark { font: italic 400 40px/0.9 var(--serif); letter-spacing: -.01em; margin: 6px 0 4px; }
+  .wordmark span { color: var(--amber); font-style: normal; }
+  .tagline { font: italic 15px/1.3 var(--serif); color: var(--ink-2); }
+  .tagline select {
+    font: inherit; color: var(--ink); background: transparent; border: 0;
+    border-bottom: 1px dashed var(--hair-2); padding: 0 2px; cursor: pointer; appearance: none;
+  }
+  .tagline select:focus { outline: none; border-bottom-color: var(--amber); }
+  .tagline option { background: var(--bg-2); }
+  .counts { display: flex; gap: 14px; margin-top: 12px; font: 11px var(--mono); color: var(--ink-2); }
+  .counts b { color: var(--ink); font-weight: 500; }
+
+  /* legend */
+  .legend { top: 196px; left: 18px; width: 272px; padding: 14px 16px; animation-delay: .3s;
+    max-height: calc(100vh - 196px - 132px); overflow: auto; scrollbar-width: none; }
+  .legend::-webkit-scrollbar { display: none; }
+  .rows { display: grid; gap: 2px; margin-top: 8px; }
+  .row {
+    display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 9px;
+    padding: 4px 6px; margin: 0 -6px; border-radius: 6px; cursor: pointer; user-select: none;
+    color: var(--ink-2); transition: background .2s, color .2s;
+  }
+  .row:hover { background: rgba(236,230,214,.05); color: var(--ink); }
+  .row.on { color: var(--ink); background: rgba(236,230,214,.07); }
+  .row.off { opacity: .38; }
+  .row .n { font: 10.5px var(--mono); color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+  .swatch { width: 14px; height: 2px; border-radius: 2px; }
+  .shapes { display: flex; gap: 14px; margin-top: 10px; font: 10.5px var(--mono); color: var(--ink-2); flex-wrap: wrap; }
+  .shapes i { display: inline-block; margin-right: 6px; vertical-align: -1px; }
+  .s-mod { width: 9px; height: 9px; border: 1.5px solid var(--ink-2); border-radius: 50%; }
+  .s-cls { width: 9px; height: 9px; background: var(--ink-2); border-radius: 50%; }
+  .s-fn { width: 5px; height: 5px; background: var(--ink-2); border-radius: 50%; }
+  .s-doc { width: 7px; height: 7px; background: var(--ink-2); transform: rotate(45deg); }
+  .tools { display: flex; gap: 6px; margin-top: 12px; }
+  .btn {
+    font: 500 10.5px var(--mono); letter-spacing: .06em; color: var(--ink-2); background: transparent;
+    border: 1px solid var(--hair-2); border-radius: 999px; padding: 6px 10px; cursor: pointer;
+    transition: all .2s var(--ease);
+  }
+  .btn:hover { color: var(--ink); border-color: var(--ink-2); }
+  .btn.amber { color: #160f02; background: var(--amber); border-color: var(--amber); }
+  .btn.amber:hover { filter: brightness(1.08); box-shadow: 0 0 24px rgba(255,200,97,.35); }
+
+  /* search */
+  .search { top: 18px; left: 50%; transform: translateX(-50%); width: min(460px, calc(100vw - 640px));
+    min-width: 260px; animation-delay: .45s; padding: 0; }
+  .search.panel { transform: translate(-50%, 8px); animation-name: rise-x; }
+  @keyframes rise-x { to { opacity: 1; transform: translate(-50%, 0); } }
+  .search label { display: flex; align-items: center; gap: 10px; padding: 11px 14px; }
+  .search input {
+    flex: 1; background: none; border: 0; color: var(--ink); font: 13px var(--mono); outline: none;
+  }
+  .search input::placeholder { color: var(--muted); }
+  .hint { font: 9.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  @media (max-width: 1100px) { .hint { display: none; } }
+  kbd { font: 10px var(--mono); color: var(--muted); border: 1px solid var(--hair-2); border-radius: 4px; padding: 1px 5px; }
+  .results { border-top: 1px solid var(--hair); max-height: 320px; overflow: auto; display: none; }
+  .results.open { display: block; }
+  .result {
+    display: grid; grid-template-columns: 9px 1fr auto; gap: 10px; align-items: center;
+    padding: 8px 14px; cursor: pointer; font: 12px var(--mono); color: var(--ink-2);
+  }
+  .result:hover, .result.active { background: rgba(255,200,97,.08); color: var(--ink); }
+  .result small { display: block; color: var(--muted); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kind { font: 9.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+  /* inspector */
+  .inspector { top: 18px; right: 18px; width: 340px; padding: 18px; max-height: calc(100vh - 36px - 120px);
+    overflow: auto; scrollbar-width: thin; display: none; animation: none; opacity: 1; transform: none; }
+  .inspector.open { display: block; animation: slide .5s var(--ease); }
+  @keyframes slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+  .insp-name { font: italic 30px/1.05 var(--serif); margin: 8px 0 6px; word-break: break-word; }
+  .insp-q { font: 11px/1.5 var(--mono); color: var(--ink-2); word-break: break-all; }
+  .meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin-top: 12px; font: 11px var(--mono); }
+  .meta dt { color: var(--muted); } .meta dd { margin: 0; color: var(--ink-2); word-break: break-all; }
+  .docline { margin-top: 12px; font: italic 15px/1.35 var(--serif); color: var(--ink-2); }
+  .sig { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--hair); border-radius: 8px;
+    font: 11px/1.5 var(--mono); color: var(--teal); white-space: pre-wrap; word-break: break-word; }
+  .close { position: absolute; top: 12px; right: 12px; background: none; border: 0; color: var(--muted);
+    font: 18px var(--sans); cursor: pointer; }
+  .close:hover { color: var(--ink); }
+  .group { margin-top: 14px; }
+  .group h4 { margin: 0 0 6px; display: flex; justify-content: space-between; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    font: 11px var(--mono); color: var(--ink-2); border: 1px solid var(--hair-2); border-radius: 999px;
+    padding: 3px 9px; cursor: pointer; transition: all .15s; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chip:hover { color: var(--ink); border-color: var(--amber); background: var(--amber-soft); }
+  .chip.more { border-style: dashed; color: var(--muted); }
+  .impact-box { margin-top: 14px; padding: 12px; border: 1px solid rgba(255,200,97,.25); border-radius: 10px;
+    background: linear-gradient(180deg, rgba(255,200,97,.07), transparent); }
+  .impact-total { font: italic 34px/1 var(--serif); color: var(--amber); }
+  .bars { display: grid; gap: 5px; margin: 10px 0 4px; }
+  .bar { display: grid; grid-template-columns: 52px 1fr 34px; gap: 8px; align-items: center; font: 10.5px var(--mono); color: var(--ink-2); }
+  .bar .track { height: 4px; background: rgba(236,230,214,.06); border-radius: 4px; overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 4px; transform-origin: left; animation: grow .8s var(--ease) both; }
+  @keyframes grow { from { transform: scaleX(0); } }
+
+  /* tooltip */
+  .tip {
+    position: fixed; pointer-events: none; z-index: 20; max-width: 360px; padding: 9px 11px;
+    background: rgba(8,9,14,.92); border: 1px solid var(--hair-2); border-radius: 9px;
+    font: 11px/1.45 var(--mono); color: var(--ink-2); opacity: 0; transition: opacity .12s;
+  }
+  .tip.show { opacity: 1; }
+  .tip b { display: block; font: italic 17px/1.1 var(--serif); color: var(--ink); margin-bottom: 3px; }
+
+  /* readout */
+  .readout { position: fixed; right: 22px; bottom: 132px; font: 10px var(--mono); letter-spacing: .12em;
+    color: var(--muted); text-align: right; pointer-events: none; }
+
+  /* ---------- chat dock ---------- */
+  .dock { left: 50%; bottom: 18px; width: min(820px, calc(100vw - 36px)); padding: 0;
+    transform: translate(-50%, 8px); animation-name: rise-x; animation-delay: .6s; overflow: hidden; }
+  .transcript { max-height: 0; overflow: auto; transition: max-height .6s var(--ease); scrollbar-width: thin; }
+  .dock.expanded .transcript { max-height: min(46vh, 460px); border-bottom: 1px solid var(--hair); }
+  .turn { padding: 16px 20px 6px; animation: slide-up .5s var(--ease); }
+  @keyframes slide-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .q { font: italic 21px/1.25 var(--serif); color: var(--ink); }
+  .q::before { content: "\201C"; color: var(--amber); margin-right: 2px; }
+  .q::after { content: "\201D"; color: var(--amber); margin-left: 1px; }
+  .trace { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+  .probe {
+    font: 10.5px var(--mono); color: var(--teal); border: 1px solid rgba(127,224,208,.25);
+    background: rgba(127,224,208,.06); border-radius: 6px; padding: 3px 8px;
+    animation: pop .35s var(--ease) both;
+  }
+  .probe em { color: var(--ink-2); font-style: normal; }
+  @keyframes pop { from { opacity: 0; transform: scale(.92); } }
+  .thinking { margin-top: 10px; font: 11px var(--mono); color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .orbit { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--hair-2); position: relative; animation: spin 1.4s linear infinite; }
+  .orbit::after { content: ""; position: absolute; top: -3px; left: 50%; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .answer { margin-top: 12px; font: 400 14px/1.6 var(--sans); color: var(--ink); }
+  .answer p { margin: 0 0 10px; }
+  .answer ul, .answer ol { margin: 0 0 10px; padding-left: 20px; }
+  .answer li { margin: 3px 0; }
+  .answer strong { color: #fff; font-weight: 600; }
+  .answer code { font: 12px var(--mono); color: var(--ink-2); background: rgba(236,230,214,.06); padding: 1px 5px; border-radius: 4px; }
+  .answer code.sym { color: var(--amber); background: var(--amber-soft); cursor: pointer; border-bottom: 1px solid rgba(255,200,97,.4); }
+  .answer code.sym:hover { background: rgba(255,200,97,.28); }
+  .answer pre { background: rgba(0,0,0,.3); padding: 10px; border-radius: 8px; overflow: auto; }
+  .foot { margin: 4px 0 10px; font: 10px var(--mono); letter-spacing: .08em; color: var(--muted); }
+  .err { margin-top: 10px; color: var(--rose); font: 12px var(--mono); }
+  .composer { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 20px; }
+  .composer .eyebrow { white-space: nowrap; }
+  .composer input {
+    flex: 1; background: none; border: 0; outline: none; color: var(--ink);
+    font: italic 18px var(--serif); min-width: 0;
+  }
+  .composer input::placeholder { color: var(--muted); }
+  .suggest { display: flex; gap: 6px; padding: 0 20px 12px; flex-wrap: wrap; }
+  .suggest button {
+    font: 11px var(--mono); color: var(--ink-2); background: rgba(236,230,214,.03);
+    border: 1px solid var(--hair); border-radius: 999px; padding: 5px 10px; cursor: pointer; transition: all .2s;
+  }
+  .suggest button:hover { color: var(--ink); border-color: var(--amber); }
+  .dock.expanded .suggest { display: none; }
+  #fold { display: none; }
+  .dock.expanded #fold, .dock.folded #fold { display: inline-block; }
+
+  /* ---------- boot ---------- */
+  .boot { position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; background: var(--bg);
+    transition: opacity 1s var(--ease), visibility 1s; }
+  .boot.gone { opacity: 0; visibility: hidden; }
+  .boot-inner { text-align: center; }
+  .boot h1 { font: italic 400 76px/1 var(--serif); margin: 0; letter-spacing: -.02em; }
+  .boot h1 span { color: var(--amber); font-style: normal; }
+  .boot p { font: 11px var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin-top: 18px; }
+  .boot .err { letter-spacing: 0; text-transform: none; max-width: 520px; }
+
+  @media (max-width: 900px) {
+    .legend { display: none; }
+    .search { top: auto; bottom: 150px; width: calc(100vw - 36px); }
+    .inspector { width: calc(100vw - 36px); max-height: 45vh; }
+    .masthead { width: auto; right: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<div class="chart-rings"></div>
+<div class="grain"></div>
+<div class="vignette"></div>
+
+<section class="panel masthead">
+  <div class="eyebrow">Code knowledge graph</div>
+  <div class="wordmark">Memex<span>.</span></div>
+  <div class="tagline">a second brain for <select id="codebase" aria-label="Codebase"></select></div>
+  <div class="counts" id="counts"></div>
+</section>
+
+<aside class="panel legend">
+  <div class="eyebrow">Constellations · layers</div>
+  <div class="rows" id="layers"></div>
+  <div class="hairline"></div>
+  <div class="eyebrow">Threads · edges</div>
+  <div class="rows" id="edges"></div>
+  <div class="shapes">
+    <span><i class="s-mod"></i>module</span><span><i class="s-cls"></i>class</span>
+    <span><i class="s-fn"></i>function</span><span><i class="s-doc"></i>doc</span>
+  </div>
+  <div class="tools">
+    <button class="btn" id="fit">Fit view</button>
+    <button class="btn" id="unpin">Release pins</button>
+    <button class="btn" id="clear">Clear</button>
+  </div>
+</aside>
+
+<div class="panel search">
+  <label>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--muted)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" placeholder="Jump to a symbol or doc" autocomplete="off" spellcheck="false">
+    <span class="hint">free · instant</span>
+    <kbd>/</kbd>
+  </label>
+  <div class="results" id="results"></div>
+</div>
+
+<aside class="panel inspector" id="inspector"></aside>
+<div class="tip" id="tip"></div>
+<div class="readout" id="readout"></div>
+
+<section class="panel dock" id="dock">
+  <div class="transcript" id="transcript"></div>
+  <form class="composer" id="ask">
+    <span class="eyebrow">Ask Claude</span>
+    <input id="question" placeholder="What breaks if I change get_current_user?" autocomplete="off">
+    <button class="btn" type="button" id="fold" title="Hide the conversation">Hide</button>
+    <span class="hint">~5 s · a few cents</span>
+    <button class="btn amber" type="submit" id="send">Ask</button>
+  </form>
+  <div class="suggest" id="suggest"></div>
+</section>
+
+<div class="boot" id="boot">
+  <div class="boot-inner">
+    <h1>Memex<span>.</span></h1>
+    <p id="boot-msg">Charting the codebase</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- constants
+const PALETTE = ["#ffc861", "#7fe0d0", "#ff8f7a", "#9fb4ff", "#c5e478", "#e3a3f0",
+                 "#79c5ff", "#f6e27a", "#8fe3a3", "#ff9fc4", "#c9b08a", "#89b9b2", "#d8d0ff"];
+const DOC_COLOR = "#efe4c8";
+const EDGE_STYLE = {
+  DEFINES:    { color: "236,230,214", label: "defines",    on: true  },
+  CALLS:      { color: "127,224,208", label: "calls",      on: true  },
+  USES:       { color: "255,200,97",  label: "uses",       on: true  },
+  INHERITS:   { color: "227,163,240", label: "inherits",   on: true  },
+  REFERENCES: { color: "255,143,122", label: "references", on: true  },
+  MENTIONS:   { color: "239,228,200", label: "mentions",   on: true  },
+  IMPORTS:    { color: "159,180,255", label: "imports",    on: false },
+};
+const REL = {  // inspector labels: [outgoing, incoming]
+  CALLS: ["Calls", "Called by"], USES: ["Uses", "Used by"], DEFINES: ["Defines", "Defined in"],
+  INHERITS: ["Inherits", "Inherited by"], REFERENCES: ["References", "Referenced by"],
+  IMPORTS: ["Imports", "Imported by"], MENTIONS: ["Mentions", "Mentioned in"],
+};
+const SUGGESTIONS = {
+  mealie: [
+    "What breaks if I change get_current_user?",
+    "Who calls RecipeService.create_one, directly or indirectly?",
+    "What code depends on the Tool model?",
+    "Which rules apply if I instantiate AppSettings directly?",
+  ],
+  httpx: ["What does Client.get call?", "What depends on BaseTransport?", "Where is the auth flow handled?"],
+  memex: ["What depends on impact_of?", "How does check_change find rules?", "What calls link_uses?"],
+};
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const fmt = (n) => n.toLocaleString("en-US");
+
+// ---------------------------------------------------------------- state
+let data = null, byId = new Map(), byQ = new Map(), adj = new Map();
+let layerColor = new Map(), layerCenter = new Map();
+let enabled = new Set(Object.keys(EDGE_STYLE).filter((k) => EDGE_STYLE[k].on));
+let hover = null, selected = null, spotlight = null;
+let focusSet = null;                 // ids lit by hover/selection
+let impactMap = new Map();           // id -> distance
+let pathLinks = new Set();           // "src|dst" links on impact paths
+let answerSet = new Set(), contextSet = new Set();
+let codebase = null, Graph = null;
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  try {
+    const list = await (await fetch("/api/codebases")).json();
+    const names = list.codebases.map((c) => c.name);
+    if (!names.length) throw new Error("No codebase is indexed. Run `uv run memex index <name>`.");
+    const sel = $("codebase");
+    names.forEach((n) => sel.append(new Option(n, n)));
+    const wanted = new URLSearchParams(location.search).get("codebase");
+    sel.value = names.includes(wanted) ? wanted : names.includes("mealie") ? "mealie" : names[0];
+    sel.onchange = () => { location.search = "?codebase=" + sel.value; };
+    await load(sel.value);
+  } catch (err) {
+    $("boot-msg").innerHTML = "";
+    $("boot-msg").append(el("div", "err", String(err.message || err)));
+  }
+}
+
+async function load(name) {
+  codebase = name;
+  $("boot-msg").textContent = `Charting ${name}`;
+  const res = await fetch(`/api/graph?codebase=${encodeURIComponent(name)}`);
+  data = await res.json();
+  if (data.error) throw new Error(data.error);
+  index();
+  renderMasthead();
+  renderLegend();
+  renderSuggestions();
+  buildGraph();
+  setTimeout(() => $("boot").classList.add("gone"), 350);
+}
+
+function index() {
+  byId = new Map(data.nodes.map((n) => [n.id, n]));
+  byQ = new Map(data.nodes.map((n) => [n.q, n]));
+  adj = new Map(data.nodes.map((n) => [n.id, []]));
+  data.links = data.links.filter((l) => byId.has(l.source) && byId.has(l.target));
+  for (const l of data.links) {
+    adj.get(l.source).push({ id: l.target, kind: l.kind, out: true });
+    adj.get(l.target).push({ id: l.source, kind: l.kind, out: false });
+  }
+  for (const n of data.nodes) n.deg = adj.get(n.id).length;
+  const counts = {};
+  data.nodes.forEach((n) => { counts[n.layer || "none"] = (counts[n.layer || "none"] || 0) + 1; });
+  const layers = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  data.layerCounts = counts;
+  let i = 0;
+  const ring = layers.filter((l) => l !== "docs");
+  ring.forEach((l, k) => {
+    layerColor.set(l, PALETTE[i++ % PALETTE.length]);
+    const angle = (k / ring.length) * Math.PI * 2 - Math.PI / 2;
+    const radius = 640 + (k % 2) * 200;
+    layerCenter.set(l, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius * 0.78 });
+  });
+  layerColor.set("docs", DOC_COLOR);
+  layerCenter.set("docs", { x: 0, y: 0 });
+  data.layers = layers;
+}
+
+// ---------------------------------------------------------------- side panels
+function renderMasthead() {
+  const kinds = { module: 0, class: 0, function: 0, doc: 0 };
+  data.nodes.forEach((n) => kinds[n.kind]++);
+  const c = $("counts");
+  c.innerHTML = "";
+  [["nodes", data.nodes.length], ["edges", data.links.length], ["docs", kinds.doc]].forEach(([k, v]) => {
+    const s = el("span"); s.append(el("b", null, fmt(v)), " " + k); c.append(s);
+  });
+}
+
+function renderLegend() {
+  const layers = $("layers");
+  layers.innerHTML = "";
+  for (const l of data.layers) {
+    const row = el("div", "row");
+    row.dataset.layer = l;
+    const dot = el("span", "dot");
+    dot.style.background = layerColor.get(l); dot.style.color = layerColor.get(l);
+    row.append(dot, el("span", null, l), el("span", "n", fmt(data.layerCounts[l])));
+    row.onclick = () => { spotlight = spotlight === l ? null : l; syncLegend(); refresh(); };
+    layers.append(row);
+  }
+  const edges = $("edges");
+  edges.innerHTML = "";
+  const counts = {};
+  data.links.forEach((l) => { counts[l.kind] = (counts[l.kind] || 0) + 1; });
+  for (const [k, s] of Object.entries(EDGE_STYLE)) {
+    if (!counts[k]) continue;
+    const row = el("div", "row");
+    row.dataset.edge = k;
+    const sw = el("span", "swatch"); sw.style.background = `rgb(${s.color})`;
+    row.append(sw, el("span", null, s.label), el("span", "n", fmt(counts[k])));
+    row.onclick = () => { enabled.has(k) ? enabled.delete(k) : enabled.add(k); syncLegend(); applyLinks(); };
+    edges.append(row);
+  }
+  syncLegend();
+}
+
+function syncLegend() {
+  document.querySelectorAll("#layers .row").forEach((r) => {
+    r.classList.toggle("on", spotlight === r.dataset.layer);
+    r.classList.toggle("off", spotlight != null && spotlight !== r.dataset.layer);
+  });
+  document.querySelectorAll("#edges .row").forEach((r) => r.classList.toggle("off", !enabled.has(r.dataset.edge)));
+}
+
+function renderSuggestions() {
+  const box = $("suggest");
+  box.innerHTML = "";
+  const list = SUGGESTIONS[codebase] || [
+    "What are the most central classes?", "What depends on the main entry point?"];
+  list.forEach((s) => {
+    const b = el("button", null, s);
+    b.type = "button";
+    b.onclick = () => ask(s);
+    box.append(b);
+  });
+  $("question").placeholder = "Ask about the code in plain English";
+}
+
+// ---------------------------------------------------------------- graph
+function radius(n) {
+  const base = { module: 3.4, class: 2.8, function: 1.7, doc: 2.6 }[n.kind] || 2;
+  return base + Math.min(5, Math.sqrt(n.deg) * 0.32);
+}
+
+function isLit(id) {
+  return (focusSet && focusSet.has(id)) || impactMap.has(id) || answerSet.has(id) || contextSet.has(id);
+}
+function anyFocus() {
+  return !!(focusSet || impactMap.size || answerSet.size || contextSet.size || spotlight);
+}
+
+function buildGraph() {
+  const container = $("graph");
+  Graph = ForceGraph()(container)
+    .backgroundColor("rgba(0,0,0,0)")
+    .nodeId("id")
+    .nodeVal((n) => radius(n))
+    .nodeLabel(() => "")
+    .nodeCanvasObject(drawNode)
+    .nodePointerAreaPaint((n, color, ctx) => {
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(n.x, n.y, radius(n) + 2, 0, 2 * Math.PI); ctx.fill();
+    })
+    .linkColor(linkColor)
+    .linkWidth((l) => (linkLit(l) ? 1.3 : 0.35))
+    .linkDirectionalParticles((l) => (pathLinks.has(key(l)) ? 2 : 0))
+    .linkDirectionalParticleWidth(2.2)
+    .linkDirectionalParticleSpeed(0.006)
+    .linkDirectionalParticleColor(() => "#ffc861")
+    .autoPauseRedraw(false)
+    .d3AlphaDecay(0.018)
+    .d3VelocityDecay(0.32)
+    .cooldownTicks(400)
+    .onNodeHover((n) => { hover = n || null; container.classList.toggle("grab", !!n); showTip(n); recomputeFocus(); })
+    .onNodeClick((n) => select(n))
+    .onNodeDragEnd((n) => { n.fx = n.x; n.fy = n.y; })
+    .onBackgroundClick(() => clearAll())
+    .onZoom(({ k }) => { $("readout").textContent = `ZOOM ${k.toFixed(2)}×  ·  ${fmt(data.nodes.length)} STARS`; });
+
+  Graph.d3Force("charge").strength(-16).distanceMax(380);
+  Graph.d3Force("link")
+    .distance((l) => (l.kind === "DEFINES" ? 12 : l.kind === "MENTIONS" ? 90 : 46))
+    .strength((l) => (l.kind === "DEFINES" ? 0.7 : 0.035));
+  Graph.d3Force("layer", layerForce);
+  Graph.d3Force("center", null);
+
+  // scatter nodes near their constellation before the first tick: a calmer start
+  for (const n of data.nodes) {
+    const c = layerCenter.get(n.layer) || { x: 0, y: 0 };
+    n.x = c.x + (Math.random() - 0.5) * 260; n.y = c.y + (Math.random() - 0.5) * 260;
+  }
+  applyLinks();
+  let fitted = false;
+  Graph.onEngineStop(() => { if (!fitted) { fitted = true; Graph.zoomToFit(900, 130); } });
+  setTimeout(() => { if (!fitted) Graph.zoomToFit(900, 130); }, 2600);
+  Graph.zoom(0.35);
+  addEventListener("resize", () => Graph.width(innerWidth).height(innerHeight));
+}
+
+function layerForce(alpha) {
+  for (const n of data.nodes) {
+    const c = layerCenter.get(n.layer);
+    if (!c) continue;
+    const k = n.kind === "doc" ? 0.006 : 0.055;
+    n.vx += (c.x - n.x) * k * alpha;
+    n.vy += (c.y - n.y) * k * alpha;
+  }
+}
+
+function applyLinks() {
+  const links = data.links.filter((l) => enabled.has(l.kind));
+  Graph.graphData({ nodes: data.nodes, links });
+  recomputeFocus();
+}
+
+const idOf = (end) => (typeof end === "object" ? end.id : end);
+const key = (l) => idOf(l.source) + "|" + idOf(l.target);
+
+function linkLit(l) {
+  const s = idOf(l.source), t = idOf(l.target);
+  if (pathLinks.has(s + "|" + t)) return true;
+  const sel = selected && selected.id, hov = hover && hover.id;
+  return s === sel || t === sel || s === hov || t === hov;
+}
+
+function linkColor(l) {
+  const c = EDGE_STYLE[l.kind].color;
+  if (pathLinks.has(key(l))) return "rgba(255,200,97,.85)";
+  if (linkLit(l)) return `rgba(${c},.75)`;
+  if (anyFocus()) return `rgba(${c},.025)`;
+  return `rgba(${c},${l.kind === "DEFINES" ? 0.07 : 0.11})`;
+}
+
+function drawNode(n, ctx, scale) {
+  const r = radius(n);
+  const color = layerColor.get(n.layer) || "#888";
+  const focus = anyFocus();
+  const lit = isLit(n.id) || (spotlight && n.layer === spotlight);
+  const strong = (selected && selected.id === n.id) || (hover && hover.id === n.id) || answerSet.has(n.id);
+  ctx.globalAlpha = !focus || lit ? 1 : 0.07;
+
+  if (strong || impactMap.has(n.id)) {  // halo
+    const d = impactMap.get(n.id);
+    const halo = answerSet.has(n.id) || strong ? "#ffc861" : d === 1 ? "#ffc861" : d === 2 ? "#ff9e6a" : "#e3a3f0";
+    const g = ctx.createRadialGradient(n.x, n.y, r * 0.6, n.x, n.y, r * 4.2);
+    g.addColorStop(0, halo + "88"); g.addColorStop(1, halo + "00");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.x, n.y, r * 4.2, 0, 2 * Math.PI); ctx.fill();
+  }
+
+  ctx.fillStyle = color; ctx.strokeStyle = color;
+  if (n.kind === "module") {
+    ctx.lineWidth = Math.max(0.6, 1.1 / Math.sqrt(scale) * 1.2);
+    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(n.x, n.y, r * 0.28, 0, 2 * Math.PI); ctx.fill();
+  } else if (n.kind === "doc") {
+    ctx.beginPath(); ctx.moveTo(n.x, n.y - r); ctx.lineTo(n.x + r, n.y); ctx.lineTo(n.x, n.y + r); ctx.lineTo(n.x - r, n.y); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 2 * Math.PI); ctx.fill();
+    if (n.kind === "class") { ctx.fillStyle = "rgba(6,7,11,.75)"; ctx.beginPath(); ctx.arc(n.x, n.y, r * 0.35, 0, 2 * Math.PI); ctx.fill(); }
+  }
+  if (n.fx != null) {  // pinned: a small cross
+    ctx.strokeStyle = "rgba(236,230,214,.6)"; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(n.x - r - 2, n.y); ctx.lineTo(n.x + r + 2, n.y); ctx.moveTo(n.x, n.y - r - 2); ctx.lineTo(n.x, n.y + r + 2); ctx.stroke();
+  }
+
+  const showLabel = strong || (lit && (scale > 1.1 || answerSet.has(n.id) || impactMap.get(n.id) === 1))
+    || (!focus && scale > 2.6 && n.deg > 6) || scale > 5;
+  if (showLabel) {
+    const size = Math.max(2.2, (strong ? 13 : 10.5) / scale);
+    ctx.font = `${strong ? "italic " : ""}${size}px ${strong ? '"Instrument Serif"' : '"Geist Mono"'}`;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillStyle = strong ? "#fff7e6" : "rgba(236,230,214,.85)";
+    ctx.fillText(n.name, n.x + r + 3 / scale + 1, n.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function recomputeFocus() {
+  const center = hover || selected;
+  if (!center) { focusSet = null; return; }
+  focusSet = new Set([center.id]);
+  for (const e of adj.get(center.id) || []) if (enabled.has(e.kind)) focusSet.add(e.id);
+  if (selected && hover && selected !== hover) {
+    focusSet.add(selected.id);
+    for (const e of adj.get(selected.id) || []) if (enabled.has(e.kind)) focusSet.add(e.id);
+  }
+}
+
+function refresh() {}  // the canvas redraws every frame (autoPauseRedraw off)
+
+// ---------------------------------------------------------------- tooltip
+const tip = $("tip");
+document.addEventListener("mousemove", (e) => {
+  tip.style.left = Math.min(innerWidth - 380, e.clientX + 16) + "px";
+  tip.style.top = Math.min(innerHeight - 120, e.clientY + 14) + "px";
+});
+function showTip(n) {
+  if (!n) { tip.classList.remove("show"); return; }
+  tip.innerHTML = "";
+  tip.append(el("b", null, n.name), el("div", null, n.q));
+  tip.append(el("div", null, `${n.kind} · ${n.layer || "no layer"}${n.domain ? " / " + n.domain : ""} · ${n.deg} edges`));
+  tip.classList.add("show");
+}
+
+// ---------------------------------------------------------------- selection + inspector
+function select(n, { center = false } = {}) {
+  if (!n) return;
+  selected = n;
+  impactMap = new Map(); pathLinks = new Set();
+  recomputeFocus();
+  renderInspector(n);
+  if (center) { Graph.centerAt(n.x, n.y, 700); Graph.zoom(Math.max(Graph.zoom(), 2.4), 700); }
+  setParticles();
+}
+
+function clearAll() {
+  selected = null; hover = null; spotlight = null;
+  impactMap = new Map(); pathLinks = new Set(); answerSet = new Set(); contextSet = new Set();
+  focusSet = null;
+  $("inspector").classList.remove("open");
+  syncLegend(); setParticles(); refresh();
+}
+
+function renderInspector(n) {
+  const box = $("inspector");
+  box.innerHTML = "";
+  const close = el("button", "close", "×"); close.onclick = clearAll; close.setAttribute("aria-label", "Close");
+  box.append(close, el("div", "eyebrow", `${n.kind} · ${n.layer || "no layer"}`));
+  box.append(el("div", "insp-name", n.name), el("div", "insp-q", n.q));
+  const meta = el("dl", "meta");
+  const add = (k, v) => { if (v != null && v !== "") meta.append(el("dt", null, k), el("dd", null, v)); };
+  add("file", n.path ? `${n.path}${n.line ? ":" + n.line : ""}` : null);
+  add("domain", n.domain);
+  add("degree", String(n.deg));
+  box.append(meta);
+  if (n.kind === "function" && n.info) box.append(el("div", "sig", n.info));
+  const prose = n.kind === "doc" ? n.info : n.docstring;
+  if (prose) box.append(el("div", "docline", prose));
+
+  if (n.kind !== "doc") {
+    const btn = el("button", "btn amber", "Trace impact");
+    btn.style.marginTop = "14px";
+    btn.onclick = () => traceImpact(n, btn);
+    const slot = el("div");
+    slot.id = "impact-slot";
+    box.append(btn, slot);
+  }
+
+  const groups = new Map();
+  for (const e of adj.get(n.id)) {
+    const label = REL[e.kind][e.out ? 0 : 1];
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(byId.get(e.id));
+  }
+  const order = Object.values(REL).flat();
+  [...groups.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).forEach(([label, nodes]) => {
+    const g = el("div", "group");
+    const h = el("h4");
+    h.append(el("span", "eyebrow", label), el("span", "eyebrow", String(nodes.length)));
+    g.append(h, chipList(nodes, 10));
+    box.append(g);
+  });
+  box.classList.add("open");
+  box.scrollTop = 0;
+}
+
+function chipList(nodes, max) {
+  const chips = el("div", "chips");
+  const uniq = [...new Map(nodes.map((m) => [m.id, m])).values()];
+  uniq.slice(0, max).forEach((m) => {
+    const c = el("span", "chip", m.name);
+    c.title = m.q;
+    c.style.borderLeft = `2px solid ${layerColor.get(m.layer) || "#888"}`;
+    c.onclick = () => select(m, { center: true });
+    chips.append(c);
+  });
+  if (uniq.length > max) {
+    const more = el("span", "chip more", `+${uniq.length - max} more`);
+    more.onclick = () => { chips.replaceWith(chipList(uniq, uniq.length)); };
+    chips.append(more);
+  }
+  return chips;
+}
+
+async function traceImpact(n, btn) {
+  btn.disabled = true; btn.textContent = "Tracing…";
+  try {
+    const res = await (await fetch(`/api/impact?codebase=${encodeURIComponent(codebase)}&symbol=${encodeURIComponent(n.q)}&depth=3`)).json();
+    if (res.error) throw new Error(res.error);
+    impactMap = new Map([[n.id, 0]]);
+    pathLinks = new Set();
+    for (const d of res.dependents) {
+      if (!byId.has(d.id)) continue;
+      impactMap.set(d.id, d.distance);
+      let from = d.id;
+      for (const step of d.path) { pathLinks.add(from + "|" + step.to); from = step.to; }
+    }
+    // the walk follows edge kinds that may be hidden: show them so the trails are visible
+    const before = enabled.size;
+    ["CALLS", "USES", "INHERITS", "REFERENCES"].forEach((k) => enabled.add(k));
+    if (enabled.size !== before) { syncLegend(); applyLinks(); }
+    setParticles();
+    renderImpact(res, n);
+    Graph.zoomToFit(900, 90, (m) => impactMap.has(m.id));
+  } catch (err) {
+    $("impact-slot").replaceChildren(el("div", "err", String(err.message || err)));
+  } finally {
+    btn.disabled = false; btn.textContent = "Trace impact";
+  }
+}
+
+function renderImpact(res, n) {
+  const box = el("div", "impact-box");
+  box.append(el("div", "eyebrow", "Impact within 3 hops"));
+  const total = el("div", "impact-total", fmt(res.total));
+  total.append(el("span", "eyebrow", res.total === 1 ? "  dependent" : "  dependents"));
+  box.append(total);
+  const byDist = [0, 0, 0, 0];
+  res.dependents.forEach((d) => byDist[d.distance]++);
+  const max = Math.max(1, ...byDist);
+  const bars = el("div", "bars");
+  const colors = ["", "#ffc861", "#ff9e6a", "#e3a3f0"];
+  [1, 2, 3].forEach((d) => {
+    const b = el("div", "bar");
+    const track = el("div", "track"); const fill = el("div", "fill");
+    fill.style.width = (byDist[d] / max) * 100 + "%"; fill.style.background = colors[d];
+    fill.style.animationDelay = d * 0.12 + "s";
+    track.append(fill);
+    b.append(el("span", null, `${d} hop${d > 1 ? "s" : ""}`), track, el("span", null, String(byDist[d])));
+    bars.append(b);
+  });
+  box.append(bars);
+  const nearest = res.dependents.filter((d) => byId.has(d.id)).slice(0, 14).map((d) => byId.get(d.id));
+  box.append(chipList(nearest, 14));
+  if (res.truncated) box.append(el("div", "foot", "showing the closest 200"));
+  if (res.docs && res.docs.length) {
+    const head = el("div", "eyebrow", "Docs that mention them");
+    head.style.marginTop = "10px";
+    box.append(head);
+    res.docs.forEach((doc) => box.append(el("div", "foot", `${doc.path} · ${doc.heading_path}`)));
+  }
+  $("impact-slot").replaceChildren(box);
+}
+
+function setParticles() {
+  if (!Graph) return;
+  Graph.linkDirectionalParticles((l) => (pathLinks.has(key(l)) ? 2 : 0));
+}
+
+// ---------------------------------------------------------------- search
+const q = $("q"), results = $("results");
+let hits = [], cursor = 0;
+q.addEventListener("input", () => {
+  const term = q.value.trim().toLowerCase();
+  if (term.length < 2) { results.classList.remove("open"); return; }
+  const scored = [];
+  for (const n of data.nodes) {
+    const name = n.name.toLowerCase(), full = n.q.toLowerCase();
+    let s = -1;
+    if (name === term || full === term) s = 0;
+    else if (name.startsWith(term)) s = 1;
+    else if (full.endsWith("." + term)) s = 1;
+    else if (name.includes(term)) s = 2;
+    else if (full.includes(term)) s = 3;
+    if (s >= 0) scored.push([s, -n.deg, n]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  hits = scored.slice(0, 9).map((x) => x[2]);
+  cursor = 0;
+  drawResults();
+});
+q.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { cursor = Math.min(hits.length - 1, cursor + 1); drawResults(); e.preventDefault(); }
+  if (e.key === "ArrowUp") { cursor = Math.max(0, cursor - 1); drawResults(); e.preventDefault(); }
+  if (e.key === "Enter" && hits[cursor]) { choose(hits[cursor]); }
+  if (e.key === "Escape") { q.blur(); results.classList.remove("open"); }
+});
+function drawResults() {
+  results.innerHTML = "";
+  if (!hits.length) { results.append(el("div", "result", "Nothing by that name")); }
+  hits.forEach((n, i) => {
+    const r = el("div", "result" + (i === cursor ? " active" : ""));
+    const dot = el("span", "dot"); dot.style.background = layerColor.get(n.layer); dot.style.color = layerColor.get(n.layer);
+    const label = el("div"); label.append(el("span", null, n.name), el("small", null, n.q));
+    r.append(dot, label, el("span", "kind", n.kind));
+    r.onmousedown = (e) => { e.preventDefault(); choose(n); };
+    results.append(r);
+  });
+  results.classList.add("open");
+}
+function choose(n) { results.classList.remove("open"); q.value = n.name; q.blur(); select(n, { center: true }); }
+q.addEventListener("blur", () => setTimeout(() => results.classList.remove("open"), 120));
+
+document.addEventListener("keydown", (e) => {
+  const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
+  if (e.key === "/" && !typing) { e.preventDefault(); q.focus(); q.select(); }
+  if (e.key === "Escape" && !typing) clearAll();
+});
+$("fit").onclick = () => Graph.zoomToFit(800, 130);
+$("unpin").onclick = () => { data.nodes.forEach((n) => { n.fx = undefined; n.fy = undefined; }); Graph.d3ReheatSimulation(); };
+$("clear").onclick = clearAll;
+
+// ---------------------------------------------------------------- chat
+$("ask").addEventListener("submit", (e) => { e.preventDefault(); ask($("question").value); });
+$("fold").onclick = () => {
+  const dock = $("dock"), open = dock.classList.toggle("expanded");
+  dock.classList.toggle("folded", !open);
+  $("fold").textContent = open ? "Hide" : "Show";
+};
+
+function resolveSymbol(text) {
+  const t = text.trim().replace(/\(\)$/, "");
+  if (byQ.has(t)) return byQ.get(t);
+  const suffix = "." + t;
+  let found = null;
+  for (const n of data.nodes) {
+    if (n.q.endsWith(suffix)) { if (found) return null; found = n; }
+  }
+  return found;
+}
+
+async function ask(question) {
+  question = (question || "").trim();
+  if (!question) return;
+  const input = $("question"), send = $("send");
+  input.value = ""; send.disabled = true;
+  $("dock").classList.add("expanded"); $("dock").classList.remove("folded"); $("fold").textContent = "Hide";
+  const turn = el("div", "turn");
+  turn.append(el("div", "q", question));
+  const trace = el("div", "trace");
+  const thinking = el("div", "thinking");
+  thinking.append(el("span", "orbit"), el("span", null, "Consulting the graph"));
+  const clock = el("span"); thinking.append(clock);
+  turn.append(trace, thinking);
+  $("transcript").append(turn);
+  turn.scrollIntoView({ block: "end", behavior: "smooth" });
+  const started = performance.now();
+  const timer = setInterval(() => { clock.textContent = `${((performance.now() - started) / 1000).toFixed(0)} s`; }, 250);
+  answerSet = new Set(); contextSet = new Set(); impactMap = new Map(); pathLinks = new Set(); setParticles();
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codebase, question }),
+    });
+    if (!res.ok || !res.body) throw new Error((await res.json()).error || res.statusText);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, nl); buffer = buffer.slice(nl + 1);
+        if (line.trim()) handle(JSON.parse(line), turn, trace, thinking);
+      }
+    }
+  } catch (err) {
+    turn.append(el("div", "err", String(err.message || err)));
+  } finally {
+    clearInterval(timer); thinking.remove(); send.disabled = false;
+    turn.scrollIntoView({ block: "end", behavior: "smooth" });
+  }
+}
+
+function handle(ev, turn, trace, thinking) {
+  if (ev.type === "tool") {
+    const i = ev.input || {};
+    const arg = i.symbol || i.name || i.query || (i.proposal && i.proposal.description) || i.file_path || "";
+    const p = el("span", "probe", ev.name);
+    if (arg) p.append(el("em", null, " · " + String(arg).slice(0, 48)));
+    trace.append(p);
+  } else if (ev.type === "symbols") {
+    ev.qualnames.forEach((qn) => { const n = byQ.get(qn); if (n) contextSet.add(n.id); });
+    refresh();
+  } else if (ev.type === "text") {
+    const box = el("div", "answer");
+    box.innerHTML = DOMPurify.sanitize(marked.parse(ev.text || ""));
+    box.querySelectorAll("code").forEach((c) => {
+      if (c.closest("pre")) return;
+      const n = resolveSymbol(c.textContent);
+      if (!n) return;
+      c.classList.add("sym"); c.title = n.q;
+      c.onclick = () => select(n, { center: true });
+      answerSet.add(n.id);
+    });
+    thinking.before(box);
+    if (answerSet.size) Graph.zoomToFit(1000, 90, (m) => answerSet.has(m.id) || contextSet.has(m.id));
+    refresh();
+  } else if (ev.type === "done") {
+    const secs = ev.duration_ms ? (ev.duration_ms / 1000).toFixed(1) + " s" : "";
+    const cost = ev.cost_usd != null ? "$" + ev.cost_usd.toFixed(3) : "";
+    const lit = answerSet.size ? `${answerSet.size} symbols lit` : "";
+    turn.append(el("div", "foot", [`${trace.children.length} graph calls`, secs, cost, lit].filter(Boolean).join("  ·  ").toUpperCase()));
+  } else if (ev.type === "error") {
+    turn.append(el("div", "err", ev.message));
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
