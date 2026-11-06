@@ -22,6 +22,14 @@ To index another repo, add a section to `memex.toml` (`root` and `packages` are 
 
 Neo4j settings come from `NEO4J_URI`, `NEO4J_USER` and `NEO4J_PASSWORD` (defaults match `docker-compose.yml`).
 
+## Demo UI
+
+```sh
+uv run python demo/server.py                   # then open http://127.0.0.1:8765
+```
+
+An interactive map of an indexed codebase: every module, class, function and doc section as a node, grouped by layer, with edge types you can switch on and off. Hover to see a node's neighbours, click to inspect it, drag to pin it, press `/` to search, and use **Trace impact** to light up everything that depends on it within three hops. The chat at the bottom sends a question to headless Claude Code (`claude -p`) with only the Memex tools. It shows each tool call as it happens and highlights the symbols the answer names. The chat needs the `claude` CLI logged in; a question takes a few seconds and costs a few cents. The page loads fonts and two small libraries from public CDNs.
+
 ## Evaluation
 
 Twelve questions about Mealie with hand-verified answers (`eval/questions.yaml`), each asked in two conditions with the same model and prompt: **A** with `Read`, `Grep` and `Glob`, **B** with the Memex tools and `Read`. Details: DESIGN.md section 14.
