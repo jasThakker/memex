@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from memex.graph.model import Confidence
 
 SymbolKind = Literal["module", "class", "function"]
-ImpactEdge = Literal["CALLS", "INHERITS", "REFERENCES", "IMPORTS"]
+ImpactEdge = Literal["CALLS", "INHERITS", "REFERENCES", "IMPORTS", "USES"]  # USES: ADR-003
 
 
 class Contract(BaseModel):

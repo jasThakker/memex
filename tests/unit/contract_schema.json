@@ -918,7 +918,8 @@
               "CALLS",
               "INHERITS",
               "REFERENCES",
-              "IMPORTS"
+              "IMPORTS",
+              "USES"
             ],
             "type": "string"
           },
@@ -1328,7 +1329,8 @@
               "CALLS",
               "INHERITS",
               "REFERENCES",
-              "IMPORTS"
+              "IMPORTS",
+              "USES"
             ],
             "type": "string"
           },
@@ -1556,7 +1558,8 @@
               "CALLS",
               "INHERITS",
               "REFERENCES",
-              "IMPORTS"
+              "IMPORTS",
+              "USES"
             ],
             "type": "string"
           },
@@ -1880,7 +1883,8 @@
           "CALLS",
           "INHERITS",
           "REFERENCES",
-          "IMPORTS"
+          "IMPORTS",
+          "USES"
         ],
         "type": "string"
       },

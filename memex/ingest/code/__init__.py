@@ -19,13 +19,20 @@ from memex.ingest.code.classify import classify
 from memex.ingest.code.extractors import EXTRACTORS, Extractor
 from memex.ingest.code.extractors.base import CLASS_PROPERTIES
 from memex.ingest.code.parser import ParsedModule, parse_module
-from memex.ingest.code.resolver import SymbolTable, link_calls, link_imports, link_inherits
+from memex.ingest.code.resolver import (
+    SymbolTable,
+    link_calls,
+    link_imports,
+    link_inherits,
+    link_uses,
+)
 from memex.ingest.code.walker import walk
 
 
 def index_code(codebase: Codebase) -> GraphBatch:
-    """Every module, class and function of a codebase with its DEFINES, IMPORTS, INHERITS and
-    CALLS edges, the External nodes those point at (one per id) and the unresolved call count.
+    """Every module, class and function of a codebase with its DEFINES, IMPORTS, INHERITS,
+    CALLS and USES edges (a USES edge is left out where an extractor's REFERENCES links the
+    same pair), the External nodes those point at (one per id) and the unresolved call count.
     The extractors listed for the codebase add their edges and class properties last; an
     unknown extractor name is a ConfigError, raised before anything is read.
 
@@ -51,6 +58,12 @@ def index_code(codebase: Codebase) -> GraphBatch:
     inherits, inherit_externals = link_inherits(codebase.name, symbols)
     calls, unresolved_calls = link_calls(codebase.name, symbols)
     extracted, properties = _run_extractors(extractors, modules, symbols)
+    referenced = {(edge.source, edge.target) for edge in extracted if edge.kind == "REFERENCES"}
+    uses = [
+        edge
+        for edge in link_uses(codebase.name, symbols)
+        if (edge.source, edge.target) not in referenced
+    ]
     externals = {node.id: node for node in (*import_externals, *inherit_externals)}
     code_nodes = [
         replace(node, **properties[node.id])
@@ -87,7 +100,7 @@ def index_code(codebase: Codebase) -> GraphBatch:
     return GraphBatch(
         codebase=codebase.name,
         nodes=(codebase_node, *code_nodes, *externals.values()),
-        edges=(*defines, *imports, *inherits, *calls, *extracted),
+        edges=(*defines, *imports, *inherits, *calls, *uses, *extracted),
         stats=stats,
     )
 

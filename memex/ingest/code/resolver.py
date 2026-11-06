@@ -163,6 +163,127 @@ def link_calls(codebase: str, symbols: SymbolTable) -> tuple[list[Edge], int]:
     return list(edges.values()), unresolved
 
 
+def link_uses(codebase: str, symbols: SymbolTable) -> list[Edge]:
+    """USES edges (ADR-003): a function or class naming a codebase function or class as a
+    value, in a function's body and own parameter defaults, or in a class body's values.
+
+    A name that is the callee of a call with a CALLS edge does not count; annotations,
+    strings and a function's own decorators are never read. One edge per pair, at its first
+    line; a symbol naming itself gives none.
+    """
+    first_line: dict[tuple[str, str], int] = {}
+    for module in symbols.modules.values():
+        for node in module.nodes:
+            definition = module.definitions.get(node.qualname)
+            if isinstance(node, FunctionNode) and isinstance(
+                definition, ast.FunctionDef | ast.AsyncFunctionDef
+            ):
+                resolver = _CallResolver(symbols, module, node, definition)
+                found = _function_values(definition, resolver)
+            elif isinstance(node, ClassNode) and isinstance(definition, ast.ClassDef):
+                resolver = _CallResolver(symbols, module, None, None)
+                found = _class_values(definition, resolver)
+            else:
+                continue
+            for target, line in found:
+                if target == node.qualname:
+                    continue
+                key = (node.id, code_id(codebase, target))
+                first_line[key] = min(line, first_line.get(key, line))
+    return [
+        Edge(kind="USES", source=source, target=target, line=line)
+        for (source, target), line in first_line.items()
+    ]
+
+
+# (node, names bound around it, receiver in scope, whether a call here can get a CALLS edge)
+_ValueVisit = tuple[ast.AST, frozenset[str], bool, bool]
+
+
+def _function_values(
+    definition: ast.FunctionDef | ast.AsyncFunctionDef, resolver: _CallResolver
+) -> list[tuple[str, int]]:
+    """(target, line) of every value reference in a function's body and own defaults."""
+    defaults = [
+        *definition.args.defaults,
+        *(d for d in definition.args.kw_defaults if d is not None),
+    ]
+    stack: list[_ValueVisit] = [(d, frozenset(), False, False) for d in defaults]
+    outer = _scope_names(definition)
+    stack.extend((statement, outer, True, True) for statement in definition.body)
+    return _values(stack, resolver)
+
+
+def _class_values(definition: ast.ClassDef, resolver: _CallResolver) -> list[tuple[str, int]]:
+    """(target, line) of every value reference in a class body, nested defs left out."""
+    stack: list[_ValueVisit] = [
+        (statement, frozenset(), False, False)
+        for statement in definition.body
+        if not isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    ]
+    return _values(stack, resolver)
+
+
+def _values(stack: list[_ValueVisit], resolver: _CallResolver) -> list[tuple[str, int]]:
+    """Walks expressions for read names and dotted names, skipping annotations. Iterative."""
+    found: list[tuple[str, int]] = []
+    while stack:
+        node, names, receiver_in_scope, linked = stack.pop()
+        match node:
+            case ast.Name(ctx=ast.Load()) | ast.Attribute(ctx=ast.Load()):
+                root: ast.expr = node
+                while isinstance(root, ast.Attribute):
+                    root = root.value
+                if isinstance(root, ast.Name):
+                    target = resolver.value_target(node, names, receiver_in_scope)
+                    if target is not None:
+                        found.append((target, node.lineno))
+                else:  # `f().x`, `a[0].x`: the root holds its own names
+                    stack.append((root, names, receiver_in_scope, linked))
+                continue
+            case ast.Call() if linked:
+                site = _CallSite(node, names, receiver_in_scope)
+                calls = isinstance(resolver.resolve(site), tuple)
+                if not (calls and isinstance(node.func, ast.Name | ast.Attribute)):
+                    stack.append((node.func, names, receiver_in_scope, linked))
+                elif isinstance(node.func, ast.Attribute):
+                    root = node.func.value
+                    while isinstance(root, ast.Attribute):
+                        root = root.value
+                    if not isinstance(root, ast.Name):
+                        stack.append((root, names, receiver_in_scope, linked))
+                children = [*node.args, *(keyword.value for keyword in node.keywords)]
+                stack.extend((child, names, receiver_in_scope, linked) for child in children)
+                continue
+            case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.Lambda():
+                outside = [
+                    *getattr(node, "decorator_list", []),
+                    *node.args.defaults,
+                    *(d for d in node.args.kw_defaults if d is not None),
+                ]
+                stack.extend((child, names, receiver_in_scope, linked) for child in outside)
+                inner = names | _scope_names(node)
+                rebinds = resolver.receiver is not None and resolver.receiver in _parameters(node)
+                body = node.body if isinstance(node.body, list) else [node.body]
+                inside = receiver_in_scope and not rebinds
+                stack.extend((child, inner, inside, linked) for child in body)
+                continue
+            case ast.ClassDef():
+                children = [*node.decorator_list, *node.bases, *node.body]
+                stack.extend((child, names, receiver_in_scope, linked) for child in children)
+                continue
+            case ast.AnnAssign():
+                if node.value is not None:
+                    stack.append((node.value, names, receiver_in_scope, linked))
+                continue
+            case ast.arg() | ast.Constant():
+                continue
+        stack.extend(
+            (child, names, receiver_in_scope, linked) for child in ast.iter_child_nodes(node)
+        )
+    return found
+
+
 _EXTERNAL = "external"  # a builtin, a literal, or a name from outside the codebase
 _NOT_A_FUNCTION = "not a function"  # constructing a class with no __init__ in the codebase
 _UNRESOLVED = "unresolved"
@@ -197,11 +318,20 @@ class _CallResolver:
         self,
         symbols: SymbolTable,
         module: ParsedModule,
-        function: FunctionNode,
-        definition: ast.FunctionDef | ast.AsyncFunctionDef,
+        function: FunctionNode | None,
+        definition: ast.FunctionDef | ast.AsyncFunctionDef | None,
     ) -> None:
+        """Without a function, names are seen from module scope (a class body)."""
         self.symbols = symbols
         self.module = module
+        self.locals: frozenset[str] = frozenset()
+        self.active_receiver: str | None = None
+        if function is None or definition is None:
+            self.cls: str | None = None
+            self.receiver: str | None = None
+            self.is_classmethod = False
+            self.imports: dict[str | None, RawImport] = {}
+            return
         parent = function.qualname.rsplit(".", 1)[0]
         self.cls = parent if function.is_method and parent in symbols.classes else None
         decorators = {_decorator_name(d) for d in definition.decorator_list}
@@ -217,8 +347,44 @@ class _CallResolver:
             for raw in module.imports
             if not raw.module_level and function.line <= raw.line <= function.end_line
         }
-        self.locals: frozenset[str] = frozenset()
-        self.active_receiver: str | None = None
+
+    def value_target(
+        self, expr: ast.Name | ast.Attribute, names: frozenset[str], receiver_in_scope: bool
+    ) -> str | None:
+        """The function or class a read name or dotted name refers to, by its longest leading
+        part that resolves exactly (ADR-003), or None."""
+        self.locals = names
+        self.active_receiver = self.receiver if receiver_in_scope else None
+        parts: list[str] = []
+        root: ast.expr = expr
+        while isinstance(root, ast.Attribute):
+            parts.insert(0, root.attr)
+            root = root.value
+        if not isinstance(root, ast.Name):
+            return None
+        if root.id == self.active_receiver and self.cls is not None:  # self.m, self.a.m
+            owner: str | None = self.cls
+            for part in parts:
+                if owner is None:
+                    return None
+                method = self.symbols.method(owner, part)
+                if method is not None:
+                    return method
+                owner = self.symbols.attribute_class(owner, part)
+            return None
+        head = self._head(root.id)
+        if not isinstance(head, tuple) or head[1]:
+            return None
+        dotted, target = head[0], None
+        for part in [None, *parts]:
+            if part is not None:
+                found = self.symbols.find(dotted, part, hops=0)
+                if found is None:
+                    break
+                dotted = found
+            if dotted in self.symbols.functions or dotted in self.symbols.classes:
+                target = dotted
+        return target
 
     def resolve(self, site: _CallSite) -> _Outcome:
         """The outcome of one call site, seen from the scope it sits in."""

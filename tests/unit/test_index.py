@@ -85,7 +85,7 @@ def test_batch_holds_every_code_edge_kind_and_externals() -> None:
     kinds = Counter(edge.kind for edge in LAYERED.edges)
     externals = {node.name for node in LAYERED.nodes if isinstance(node, ExternalNode)}
 
-    assert set(kinds) == {"DEFINES", "IMPORTS", "INHERITS", "CALLS", "REFERENCES"}
+    assert set(kinds) == {"DEFINES", "IMPORTS", "INHERITS", "CALLS", "REFERENCES", "USES"}
     assert kinds["DEFINES"] == len(by_qualname(LAYERED)) - 27  # one per class or function
     assert "pydantic.BaseModel" in externals
 

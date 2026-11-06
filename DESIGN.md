@@ -178,6 +178,7 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 | `INHERITS` | Class -> Class/External | position |
 | `REFERENCES` | Class -> Class | kind (`foreign_key`, `relationship`, ...), attr, line, extractor |
 | `MENTIONS` | Doc -> Module/Class/Function | match (`qualname`, `path`, `backtick_name`) |
+| `USES` | Function/Class -> Function/Class | line (ADR-003, section 9) |
 
 ### Doc chunks and mentions
 
@@ -235,6 +236,11 @@ Best effort, with honest labels. Call sites count when they are inside a functio
 
 Base classes are resolved as the module binds them before the class binds its own name, so `class Base(Base)` and `class Repo(Repo[int])` inherit from the imported class.
 
+**USES (ADR-003).** A codebase function or class named as a value gets a USES edge from the function or class that names it: `Depends(get_current_user)`, `add_task(self.scrape)`, `select(Model)`, `isinstance(x, Model)`, or constructing a class with no `__init__` in the codebase.
+- Read in a function's body (nested defs and lambdas included) and its own parameter defaults, and in a class body's statements other than nested defs and classes. Never in annotations, string constants or a function's own decorators.
+- A read name or dotted name resolves as a call's callee does (rules 1 to 4, typed attributes included), never by a unique name; the longest leading part that resolves to a Function or Class is the target (`Model.save` gives the method, `Model.query.filter` gives `Model`).
+- A name that is the callee of a call with a CALLS edge does not count, nor a symbol naming itself, nor a pair an extractor links by REFERENCES. One edge per pair, at its first line.
+
 Stretch: store 2 to 3 candidates as `ambiguous` edges, hidden by default and shown with `include_ambiguous=True`.
 
 Known weak spot: calls through attributes whose type is only known at runtime, such as an injected object stored without an annotation, need type information to resolve, so they are usually `inferred` or unresolved. Attributes typed in the class itself are resolved (rule 3); section 13 states the rest as a limit.
@@ -268,7 +274,7 @@ callees(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGrap
     # __init__; a class that only inherits __init__, and a module, have no calls
 
 impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact
-    # reverse traversal over CALLS, INHERITS, REFERENCES and IMPORTS from the
+    # reverse traversal over CALLS, INHERITS, REFERENCES, IMPORTS and USES from the
     # symbol and everything it DEFINES; modules are leaves (their importers are
     # not followed), and so is a class reached by REFERENCES (what depends on a
     # model does not depend, through it, on the models it references); the closest `limit` dependents grouped by layer, each with
@@ -367,6 +373,7 @@ Stated openly:
 - Full re-index only; incremental indexing comes later.
 - `callers` of a class that only inherits `__init__` is empty: constructor calls are stored on the base's `__init__`, so they cannot be told apart from other subclasses' constructions.
 - Symbol lookup filters on qualname suffixes without using an index; fine at the benchmark sizes (under 400 ms per tool call on Mealie, MCP round trip included).
+- USES misses a value reached through a local variable (`scraper = Scraper(); add_task(scraper.scrape)`), the type arguments of a base class (`Repo[Out, Tool]`), and module-level code. Naming a symbol is not always depending on its behaviour (an `isinstance` check), so USES can over-report.
 - Doc mentions are found lexically; a bare word outside backticks never matches. A name inside a call written in backticks (`Depends(get_session)`) is not linked, and bare method names are not linked (section 7).
 - Backtick spans are found outside fences only: a span inside an HTML comment or indented code still links, and a fence opened inside an HTML comment hides the spans after it. A code span that wraps across lines is not linked.
 - The chunker reads only the block rules that decide headings:

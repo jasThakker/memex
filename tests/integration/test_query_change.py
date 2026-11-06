@@ -77,14 +77,15 @@ def test_without_symbols_code_names_in_the_description_are_resolved(indexed: Dri
     result = check(indexed, f"Change `BaseService` and split {USER_REPOS} in two.")
 
     assert resolved(result) == [BASE, USER_REPOS]
-    # one walk from both start sets: repository_factory, OrderService.owner_name and
-    # UserService.get join (get_user, which calls UserService.get, is already there)
-    assert result.affected.total == 15
+    # one walk from both start sets: repository_factory, AllRepositories.__init__ (it
+    # constructs UserRepository), OrderService.owner_name, UserService.get and
+    # OrderService.default_repos join; the routes and OrderService.create are already there
+    assert result.affected.total == 17
     assert result.affected.layers == [
         LayerCount(layer="base", count=1),
-        LayerCount(layer="repos", count=1),
+        LayerCount(layer="repos", count=2),
         LayerCount(layer="routes", count=4),
-        LayerCount(layer="services", count=9),
+        LayerCount(layer="services", count=10),
     ]
 
 

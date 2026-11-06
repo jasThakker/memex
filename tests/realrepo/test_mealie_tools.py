@@ -152,6 +152,31 @@ def test_calls_through_typed_attributes_reach_the_service(server: FastMCP) -> No
     } <= found
 
 
+def test_fastapi_dependencies_reach_their_users(server: FastMCP) -> None:
+    # The five direct dependents eval/impact_check.md found missing: `Depends(...)` in a
+    # parameter default, a class attribute and a router's __init__ (USES, ADR-003).
+    result = call(
+        server,
+        "impact_of",
+        {
+            "codebase": "mealie",
+            "symbol": "mealie.core.dependencies.dependencies.get_current_user",
+            "max_depth": 1,
+            "limit": 50,
+        },
+    )
+    impact = Impact.model_validate(result.structured_content)
+
+    by_uses = {d.symbol.qualname for d in dependents(impact) if d.path[0].edge == "USES"}
+    assert {
+        "mealie.core.dependencies.dependencies.get_admin_user",
+        "mealie.routes.auth.auth.refresh_token",
+        "mealie.routes._base.routers.UserAPIRouter.__init__",
+        "mealie.routes._base.permissions.RequirePermission.__call__",
+        "mealie.routes._base.base_controllers.BaseUserController",
+    } <= by_uses
+
+
 def test_find_symbol_puts_the_class_first(server: FastMCP) -> None:
     result = call(server, "find_symbol", {"codebase": "mealie", "name": "RecipeModel"})
     found = SymbolSearch.model_validate(result.structured_content).symbols

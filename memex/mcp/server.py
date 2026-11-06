@@ -91,7 +91,8 @@ def build_server(driver: Driver, registry: Registry) -> FastMCP:
     @mcp.tool(annotations=READ_ONLY)
     def impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact:
         """What depends on `symbol` (and on everything it defines): code that calls, inherits,
-        references or imports it, up to `max_depth` (1 to 5) edges away, grouped by layer,
+        references, imports or uses it as a value (`Depends(f)`, `select(Model)`), up to
+        `max_depth` (1 to 5) edges away, grouped by layer,
         each with its edge path back. `total` counts all dependents, including those cut by
         `limit`. Also lists up to 5 doc sections that mention the symbol or a dependent, those
         on the symbol first. `truncated` is set when dependents, candidates or docs were cut."""

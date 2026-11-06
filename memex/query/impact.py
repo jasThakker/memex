@@ -2,8 +2,8 @@
 
 - The start set is the symbol plus everything it defines, transitively, so the impact of a
   class includes code that calls its methods.
-- Dependents are found by walking CALLS, INHERITS, REFERENCES and IMPORTS edges backwards,
-  breadth first, up to `max_depth`. Each appears once, at its shortest distance, with its
+- Dependents are found by walking CALLS, INHERITS, REFERENCES, IMPORTS and USES edges
+  backwards, breadth first, up to `max_depth`. Each appears once, at its shortest distance, with its
   edge path back to the start set; ties go to the first target by qualname.
 - Modules are leaves: a module that imports a dependent is listed, but what imports that
   module is not followed (otherwise most of a codebase depends on anything by depth 3).
@@ -26,7 +26,7 @@ from memex.query.calls import check_depth
 from memex.query.models import Dependent, DocRef, Impact, LayerGroup, PathStep
 from memex.query.symbols import check_limit, resolve_symbol, symbol_ref
 
-IMPACT_EDGES = ["CALLS", "INHERITS", "REFERENCES", "IMPORTS"]
+IMPACT_EDGES = ["CALLS", "INHERITS", "REFERENCES", "IMPORTS", "USES"]
 # A class that only references a dependent does not pass the dependency on to its own
 # dependents, so the walk stops there.
 LEAF_EDGES = {"REFERENCES"}
