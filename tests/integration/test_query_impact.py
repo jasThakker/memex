@@ -174,10 +174,16 @@ def test_a_module_starts_from_everything_it_defines(indexed: Driver) -> None:
 
     assert groups(impact) == [
         ("repos", [("app.repos.repository_factory", 1)]),
-        ("services", [(f"{ORDER_SERVICE}.owner_name", 1)]),
+        ("routes", [("app.routes.users.api.get_user", 2)]),
+        ("services", [(f"{ORDER_SERVICE}.owner_name", 1), (f"{USER_SERVICE}.get", 1)]),
     ]
     assert path_of(impact, f"{ORDER_SERVICE}.owner_name") == [
         PathStep(edge="CALLS", to="app.repos.repository_users.UserRepository.get_name")
+    ]
+    # through self.repos.users, typed by annotations in the classes themselves
+    assert path_of(impact, "app.routes.users.api.get_user") == [
+        PathStep(edge="CALLS", to=f"{USER_SERVICE}.get"),
+        PathStep(edge="CALLS", to="app.repos.repository_users.UserRepository.get_one"),
     ]
 
 

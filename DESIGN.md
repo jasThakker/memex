@@ -224,6 +224,7 @@ Best effort, with honest labels. Call sites count when they are inside a functio
 1. A name defined locally in the module: `exact`.
 2. An imported name (`from x import f`, at module level or inside the function): `exact`. Re-exports are followed, also to a name a codebase module re-exports from outside.
 3. `self.x`, `cls.x`, `cls()`, `super().x`, `super(C, self).x`, `C.x` and `C(...).x` where `C` is a class in the codebase: the class (for `super()`, the bases of the method's class or of `C`), then its in-codebase bases depth first: `exact`. `super()` inside a class nested in a method, or with no enclosing class node, is unresolved.
+   - Typed attributes: in `self.a.x` (and `self.a.b.x`, one attribute per step), `a` has the codebase class `C` given by the first of the method's class and its bases, depth first, that types `a`: a `property` or `cached_property` named `a` with return annotation `C`, or, in `__init__`, assignments to `self.a` that all agree on `C` (`self.a: C = ...`, `self.a = C(...)`, or `self.a = p` with the parameter annotated `p: C`). Annotations are read as the module binds them; a string annotation is parsed. `x` is then looked up on `C` and its bases: `exact`; if it is not found, rules 4 to 6 apply. An unannotated parameter, a union, any other assigned value, an assignment outside `__init__`, or a property without a return annotation leaves `a` untyped.
 4. `alias.x` or `alias.sub.x` where `alias` is an imported module: `exact`.
 5. Otherwise, a function or method name that is unique in the codebase: `inferred`. Never for dunder names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), a `super()` call, or a bare name bound inside the function or by the module (an assignment, or an import the resolver cannot place).
 6. Otherwise, no edge. The unresolved count is recorded per codebase.
@@ -236,7 +237,7 @@ Base classes are resolved as the module binds them before the class binds its ow
 
 Stretch: store 2 to 3 candidates as `ambiguous` edges, hidden by default and shown with `include_ambiguous=True`.
 
-Known weak spot: calls through attributes whose type is only known at runtime, such as `self.repos.recipes.get_one(...)` (a common pattern in apps that inject repositories or services), need type information to resolve, so they are usually `inferred` or unresolved. Section 13 states this as a v1 limit.
+Known weak spot: calls through attributes whose type is only known at runtime, such as an injected object stored without an annotation, need type information to resolve, so they are usually `inferred` or unresolved. Attributes typed in the class itself are resolved (rule 3); section 13 states the rest as a limit.
 
 ## 10. MCP tools
 
@@ -357,8 +358,8 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 Stated openly:
 - Python only.
 - One framework extractor (SQLAlchemy).
-- Name-based call resolution with no type inference. Calls through injected attributes (`self.repos.x.get_one()`) whose method name is shared by several classes get no edge.
-- Local names are not typed either: `with Client(...) as client: client.request()` and `client = Client(); client.request()` give no edge when the method name is shared (found in the Phase 5 live check: httpx's module-level `request()` is not a caller of `Client.request`).
+- Name-based call resolution with no type inference beyond the class's own annotations and constructor calls (section 9, rule 3). Calls through attributes typed some other way (an unannotated parameter, a union such as `C | None`, an assignment outside `__init__`) whose method name is shared by several classes get no edge.
+- Local names are not typed: `with Client(...) as client: client.request()` and `client = Client(); client.request()` give no edge when the method name is shared (found in the Phase 5 live check: httpx's module-level `request()` is not a caller of `Client.request`).
 - Functions and classes defined inside a function get no node of their own; their code counts as part of the enclosing function.
 - Names are resolved at module scope: a base defined in a class body, a nested class called as `self.Inner()`, `cls(...).m()`, and a later outside import that shadows an earlier local class are not resolved as Python would.
 - An outside name re-exported through a star import of an outside module is not followed.

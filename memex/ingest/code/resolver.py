@@ -30,6 +30,11 @@ and lambdas included (not decorators or defaults):
 - `self.m()`, `cls.m()`, `cls()`, `super().m()`, `super(C, self).m()`, `C.m()` and `C(...).m()`
   where `C` is a class in the codebase: the method on that class or its bases, depth first:
   `exact`. `super()` inside a class nested in a method, or with no class node, is unresolved.
+- `self.a.m()` and `self.a.b.m()` where each attribute is typed by the class or its bases:
+  a property or cached_property's return annotation, or in `__init__`, `self.a: C = ...`,
+  `self.a = C(...)` or `self.a = p` with `p: C`, every assignment agreeing on one class
+  (`SymbolTable.attribute_class`). The method on that class or its bases: `exact`. If it has
+  none, the rules below apply.
 - `alias.f()` or `alias.sub.f()` where `alias` is an imported module in the codebase: `exact`.
 - Otherwise, a name that only one function in the codebase has: `inferred`. Never for dunder
   names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), `super()` calls,
@@ -246,6 +251,8 @@ class _CallResolver:
             return self._resolve_super(receiver, name)
         if isinstance(receiver, ast.Name) and receiver.id == self.active_receiver:
             cls = self.cls
+        elif (typed := self._attribute_class(receiver)) is not None:  # self.a.m(), self.a.b.m()
+            cls = typed
         elif isinstance(receiver, ast.Call):  # C(...).m()
             constructed = self._dotted(receiver.func)
             if constructed is not None and constructed[0] in self.symbols.classes:
@@ -288,6 +295,16 @@ class _CallResolver:
         if self.symbols.has_outside_base(start) or hasattr(object, name):
             return _EXTERNAL  # the method comes from a base outside the codebase
         return _UNRESOLVED
+
+    def _attribute_class(self, expr: ast.expr) -> str | None:
+        """The class of `self.a` or `self.a.b`, one typed attribute per step, or None."""
+        if isinstance(expr, ast.Name):
+            is_instance = expr.id == self.active_receiver and not self.is_classmethod
+            return self.cls if is_instance else None
+        if isinstance(expr, ast.Attribute):
+            owner = self._attribute_class(expr.value)
+            return None if owner is None else self.symbols.attribute_class(owner, expr.attr)
+        return None
 
     def _head(self, name: str) -> tuple[str, bool] | str | None:
         """What a bare name in this function refers to: (dotted, is_external), _LOCAL or None."""
@@ -486,6 +503,7 @@ class SymbolTable:
         self._written_bases: dict[str, list[tuple[str, bool] | None]] = {}
         self._module_names: dict[str, frozenset[str]] = {}
         self._class_attributes: dict[str, dict[str, str]] = {}
+        self._typed_attributes: dict[str, dict[str, str | None]] = {}
 
     def module_of(self, qualname: str) -> ParsedModule:
         """The parsed module a module, class or function node comes from."""
@@ -598,6 +616,106 @@ class SymbolTable:
                 return f"{current}.{name}"
             stack.extend(reversed(self.bases(current)))
         return None
+
+    def attribute_class(self, cls: str, name: str) -> str | None:
+        """The codebase class of instance attribute `name`, from the first of the class and
+        its bases (depth first) that types it, or None (DESIGN.md section 9, rule 3)."""
+        for owner in self.ancestors(cls):
+            typed = self._attributes_typed_by(owner)
+            if name in typed:
+                return typed[name]
+        return None
+
+    def _attributes_typed_by(self, cls: str) -> dict[str, str | None]:
+        """Attributes one class types, each with its class, or None when it is not exactly one.
+
+        A property or cached_property gives its return annotation. In `__init__`, every
+        assignment to `self.a` counts: `self.a: C = ...`, `self.a = C(...)`, and `self.a = p`
+        for a parameter annotated `p: C`; any other assignment leaves `a` untyped.
+        """
+        if cls in self._typed_attributes:
+            return self._typed_attributes[cls]
+        module = self.module_of(cls)
+        found: dict[str, set[str | None]] = {}
+        for qualname, definition in module.definitions.items():
+            if qualname.rsplit(".", 1)[0] != cls or not isinstance(
+                definition, ast.FunctionDef | ast.AsyncFunctionDef
+            ):
+                continue
+            decorators = {_decorator_name(d) for d in definition.decorator_list}
+            if definition.name == "__init__":
+                self._init_attributes(module, definition, found)
+            elif decorators & {"property", "cached_property"}:
+                kind = self._annotation_class(module, definition.returns)
+                found.setdefault(definition.name, set()).add(kind)
+        typed = {
+            name: next(iter(kinds)) if len(kinds) == 1 else None for name, kinds in found.items()
+        }
+        self._typed_attributes[cls] = typed
+        return typed
+
+    def _init_attributes(
+        self,
+        module: ParsedModule,
+        init: ast.FunctionDef | ast.AsyncFunctionDef,
+        found: dict[str, set[str | None]],
+    ) -> None:
+        """Adds the class of each `self.a` assignment in `__init__` (None if unknown)."""
+        positional = [*init.args.posonlyargs, *init.args.args]
+        if not positional:
+            return
+        receiver = positional[0].arg
+        annotations = {
+            arg.arg: arg.annotation
+            for arg in [*positional[1:], *init.args.kwonlyargs]
+            if arg.annotation is not None
+        }
+
+        def record(target: ast.expr, value: ast.expr | None, annotation: ast.expr | None) -> None:
+            if isinstance(target, ast.Tuple | ast.List):
+                for element in target.elts:
+                    record(element, None, None)
+                return
+            if not (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == receiver
+            ):
+                return
+            kind = None
+            if annotation is not None:
+                kind = self._annotation_class(module, annotation)
+            elif isinstance(value, ast.Call):
+                kind = self._annotation_class(module, value.func)
+            elif isinstance(value, ast.Name) and value.id in annotations:
+                kind = self._annotation_class(module, annotations[value.id])
+            found.setdefault(target.attr, set()).add(kind)
+
+        stack: list[ast.AST] = list(init.body)
+        while stack:
+            node = stack.pop()
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+                continue  # another scope: its `self` is not this one
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    record(target, node.value, None)
+            elif isinstance(node, ast.AnnAssign):
+                record(node.target, node.value, node.annotation)
+            stack.extend(ast.iter_child_nodes(node))
+
+    def _annotation_class(self, module: ParsedModule, expr: ast.expr | None) -> str | None:
+        """The codebase class a name, dotted name or string annotation refers to, or None."""
+        if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+            try:
+                expr = ast.parse(expr.value, mode="eval").body
+            except SyntaxError:
+                return None
+        if expr is None:
+            return None
+        resolved = self.resolve_expression(module, expr)
+        if resolved is None or resolved[1] or resolved[0] not in self.classes:
+            return None
+        return resolved[0]
 
     def resolve(self, module: ParsedModule, raw: RawImport) -> tuple[str, bool] | None:
         """(dotted target, is_external) for one import, or None if it cannot be placed."""

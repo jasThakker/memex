@@ -30,7 +30,7 @@ def test_index_then_stats_print_the_same_summary(
     stats = capsys.readouterr().out
 
     assert indexed.startswith(stats)  # index adds only a timing line after the summary
-    assert "layered_app: 27 files, 0 parse errors, 5 unresolved calls" in stats
+    assert "layered_app: 27 files, 0 parse errors, 3 unresolved calls" in stats
 
 
 @pytest.mark.usefixtures("neo4j_env")
