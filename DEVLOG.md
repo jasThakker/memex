@@ -636,3 +636,31 @@ Not fixed by design: calls and values through local variables (`forgot_password.
 **Next:**
 - Phase 8 (demo UI), on `phase-8-demo` from `main`: an interactive graph of the indexed codebase with a small chat that answers through `claude -p` and the Memex tools.
 - Later, if wanted: the reviewer's open issues, the re-run of `eval/impact_check.md`, and the multi-hop eval.
+
+## Phase 8: Demo UI (2026-11-05)
+
+**Goal:** A page to show Memex in a demo: the indexed graph as an interactive map, with a small chat. Built on `phase-8-demo` from `main`, after Phase 9 (the numbering follows the original build plan).
+
+**Decisions (you chose):**
+- The chat answers through headless Claude Code (`claude -p`) with only the Memex tools and Read, as the eval harness does. Memex itself stays LLM-free (ADR-002). No new dependency or API key.
+- The page opens on the whole graph, with focus and highlighting on top.
+- Phase 9 was closed and merged first.
+
+**Built** (`demo/server.py`, `demo/index.html`, README "Demo UI"):
+- A standard-library HTTP server outside the `memex` package: graph export (one read query of its own), `impact_of` and `list_codebases` through `memex.query`, and `/api/chat`, which streams the tool calls and the answer from `claude -p` as NDJSON. The child `claude` runs in an empty temp folder with the calling session's environment variables removed.
+- One HTML page using `force-graph`, `marked` and `DOMPurify` from a CDN:
+  - nodes coloured by layer and drawn by kind; edge types can be toggled (imports off by default);
+  - hover, click to inspect, drag to pin, `/` to search;
+  - Trace impact, with particles along the dependency paths;
+  - the chat, whose answer symbols light up in the graph.
+- After your question about the two search bars, they are labelled: "Jump to a symbol" (free, instant) and "Ask Claude" (about 5 s, a few cents).
+
+**Checked:** headless Chrome over the DevTools protocol, with no console errors:
+- load, select, trace impact (`get_current_user`: 106 dependents), search;
+- two chat questions: 5.2 s for $0.037, and 6.0 s for $0.028 with 13 symbols lit.
+
+The demo has no automated tests.
+
+**Numbers:** Mealie exports 3,092 nodes and 9,779 edges (2.8 MB, 0.3 s). Chat spend while testing: about $0.07.
+
+**Next:** none planned. Open items are in the Phase 9 entry.
