@@ -51,13 +51,16 @@ def test_layered_app_calls_and_confidences() -> None:
         (f"{ORDER_SERVICE}.create", f"{ORDER_SERVICE}.default_repos", "exact"),  # cls.m()
         (f"{ORDER_SERVICE}.default_repos", REPOS_INIT, "exact"),
         (f"{ORDER_SERVICE}.owner_name", f"{ORDER_SERVICE}.get", "exact"),  # self.m()
-        # injected attribute, unique method name
+        # a local variable is not typed: unique method name
         (f"{ORDER_SERVICE}.owner_name", f"{USER_REPO}.get_name", "inferred"),
         (f"{USER_REPO}.get_name", f"{USER_REPO}.get_one", "exact"),
+        # self.repos.<x>.get_one: `repos` typed by BaseService.__init__'s annotated parameter,
+        # `<x>` by `self.<x> = C()` in AllRepositories.__init__
+        (f"{ORDER_SERVICE}.get", "app.repos.repository_orders.OrderRepository.get_one", "exact"),
+        (f"{USER_SERVICE}.get", f"{USER_REPO}.get_one", "exact"),
     }
-    # create_app: register(...) twice (a nested def, no node) and application.include_router;
-    # OrderService.get and UserService.get: self.repos.<x>.get_one (two methods named get_one).
-    assert unresolved == 5
+    # create_app: register(...) twice (a nested def, no node) and application.include_router.
+    assert unresolved == 3
 
 
 def test_plainrepo_calls_and_confidences() -> None:
@@ -68,10 +71,12 @@ def test_plainrepo_calls_and_confidences() -> None:
         ("reporter.cli.main", "toolkit._client.Client.send", "exact"),  # Client().send()
         ("reporter.cli.main", "reporter.formats.table.render_table", "exact"),  # module alias
         ("toolkit._client.Client.send", "toolkit.text.slug.slugify", "exact"),
+        # self.transport typed by `self.transport = HttpTransport()` in __init__
+        ("toolkit._client.Client.send", "toolkit._transport.http.HttpTransport.send", "exact"),
     }
-    # parser.add_argument, parser.parse_args, self.transport.send (three methods named send),
-    # payload.encode, title.lower. Not counted: argparse, print, len, re.sub, "\n".join.
-    assert unresolved == 5
+    # parser.add_argument, parser.parse_args, payload.encode, title.lower.
+    # Not counted: argparse, print, len, re.sub, "\n".join.
+    assert unresolved == 4
 
 
 def test_local_and_imported_names_are_exact_and_unbound_unique_names_inferred() -> None:
@@ -151,6 +156,143 @@ def test_self_cls_super_and_class_attribute_calls() -> None:
         ("pkg.use.Child.other", "pkg.use.Child.log", "exact"),
     }
     assert unresolved == 0
+
+
+TYPED_REPO = """
+    class Repo:
+        def save(self): ...
+
+    class OtherRepo:
+        def save(self): ...
+"""
+
+
+def test_calls_through_attributes_typed_in_the_class_are_exact() -> None:
+    # `save` is shared by two classes, so none of these calls has a unique name to infer from.
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/repo.py": TYPED_REPO,
+            "pkg/service.py": """
+                from functools import cached_property
+                from pkg.repo import OtherRepo, Repo
+
+                class Service:
+                    def __init__(self, repo: Repo, other: "OtherRepo") -> None:
+                        self.repo = repo
+                        self.other = other
+                        self.made = Repo()
+                        self.noted: OtherRepo = other
+
+                    @property
+                    def prop(self) -> Repo: ...
+
+                    @cached_property
+                    def cached(self) -> "OtherRepo": ...
+
+                    def by_parameter(self):
+                        self.repo.save()
+                    def by_string_annotation(self):
+                        self.other.save()
+                    def by_construction(self):
+                        self.made.save()
+                    def by_annotated_assignment(self):
+                        self.noted.save()
+                    def by_property(self):
+                        self.prop.save()
+                    def by_cached_property(self):
+                        self.cached.save()
+
+                class Child(Service):
+                    def on_a_base(self):
+                        self.repo.save()
+
+                class Holder:
+                    def __init__(self, service: Service) -> None:
+                        self.service = service
+                    def chained(self):
+                        self.service.prop.save()
+            """,
+        }
+    )
+
+    service = "pkg.service.Service"
+    assert calls(edges, "lib") == {
+        (f"{service}.by_parameter", "pkg.repo.Repo.save", "exact"),
+        (f"{service}.by_string_annotation", "pkg.repo.OtherRepo.save", "exact"),
+        (f"{service}.by_construction", "pkg.repo.Repo.save", "exact"),
+        (f"{service}.by_annotated_assignment", "pkg.repo.OtherRepo.save", "exact"),
+        (f"{service}.by_property", "pkg.repo.Repo.save", "exact"),
+        (f"{service}.by_cached_property", "pkg.repo.OtherRepo.save", "exact"),
+        ("pkg.service.Child.on_a_base", "pkg.repo.Repo.save", "exact"),  # typed on a base
+        ("pkg.service.Holder.chained", "pkg.repo.Repo.save", "exact"),  # one attribute per step
+    }
+    assert unresolved == 0  # Repo() has no __init__ in the codebase: no edge, not unresolved
+
+
+def test_attributes_without_one_known_class_are_not_typed() -> None:
+    edges, unresolved = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/repo.py": TYPED_REPO,
+            "pkg/service.py": """
+                from pkg.repo import OtherRepo, Repo
+
+                class Service:
+                    def __init__(self, plain, maybe: Repo | None, flag: bool) -> None:
+                        self.plain = plain
+                        self.maybe = maybe
+                        self.either = Repo() if flag else OtherRepo()
+                        self.twice = Repo()
+                        self.twice = OtherRepo()
+
+                    def setup(self):
+                        self.late = Repo()
+
+                    @property
+                    def bare(self): ...
+
+                    def run(self):
+                        self.plain.save()  # unannotated parameter
+                        self.maybe.save()  # a union is not one class
+                        self.either.save()  # not a call to a class
+                        self.twice.save()  # two classes assigned
+                        self.late.save()  # assigned outside __init__
+                        self.bare.save()  # property without a return annotation
+            """,
+        }
+    )
+
+    assert edges == []
+    assert unresolved == 6
+
+
+def test_a_typed_attribute_whose_class_lacks_the_method_falls_back_to_inference() -> None:
+    edges, _ = link(
+        {
+            "pkg/__init__.py": "",
+            "pkg/repo.py": """
+                class Repo:
+                    def save(self): ...
+
+                class Archive:
+                    def store(self): ...
+            """,
+            "pkg/service.py": """
+                from pkg.repo import Repo
+
+                class Service:
+                    def __init__(self, repo: Repo) -> None:
+                        self.repo = repo
+                    def run(self):
+                        self.repo.store()  # not on Repo; the only function named store
+            """,
+        }
+    )
+
+    assert calls(edges, "lib") == {
+        ("pkg.service.Service.run", "pkg.repo.Archive.store", "inferred")
+    }
 
 
 def test_method_lookup_terminates_on_a_cycle_in_the_bases() -> None:
@@ -343,9 +485,9 @@ def test_index_code_adds_calls_and_records_unresolved_calls() -> None:
     ids = {node.id for node in batch.nodes}
     call_edges = [edge for edge in batch.edges if edge.kind == "CALLS"]
 
-    assert len(call_edges) == 14
+    assert len(call_edges) == 16
     assert all(edge.source in ids and edge.target in ids for edge in call_edges)
-    assert batch.stats.unresolved_calls == 5
+    assert batch.stats.unresolved_calls == 3
 
 
 def test_parameters_of_nested_defs_and_lambdas_are_local() -> None:

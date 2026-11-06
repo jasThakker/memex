@@ -24,7 +24,7 @@ def test_stats_from_batch_counts_what_the_store_will_hold() -> None:
         "layered_app",
         27,
         0,
-        5,
+        3,
     )
     assert stats.extractors == ["sqlalchemy"]
     # Counted independently from the batch; the Codebase node itself is not a count.
@@ -32,7 +32,7 @@ def test_stats_from_batch_counts_what_the_store_will_hold() -> None:
         Counter(label_of(node) for node in batch.nodes if label_of(node) != "Codebase")
     )
     assert stats.edges == dict(Counter(edge.kind for edge in batch.edges))
-    assert (stats.edges["CALLS"], stats.edges["REFERENCES"]) == (14, 3)
+    assert (stats.edges["CALLS"], stats.edges["REFERENCES"]) == (16, 3)
     # From the fixture tree: db/models holds __init__, _model_base, orders and users; the
     # order domain is routes/orders (2), repos, schema, services/order_services (2), db/models.
     assert stats.layers["db_models"] == 4

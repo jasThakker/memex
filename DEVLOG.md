@@ -574,3 +574,65 @@ Built as planned, with one fix commit after the reviewer. Stream parsing moved f
   5. A small multi-hop impact eval (4 to 6 hand-verified "what breaks if I change X" questions) run in both conditions, with N=3. This tests the claim the current questions did not cover.
   6. Later: linking `External` nodes to another indexed codebase, for impact across repos.
 - No subagent to run before Phase 8.
+
+## Phase 9: Impact accuracy (2026-11-05)
+
+**Goal:** Measure how accurate `impact_of` is on Mealie by hand before fixing anything or paying for an eval, then fix what the measurement shows. Phase 7 left the graph's case (multi-hop "what breaks if I change X") untested. Built on `phase-9-impact` from `main`. Phase 8 (polish) was skipped.
+
+**Approved plan** (`/Users/jasthakker/.claude/plans/start-phase-9-begin-quiet-hickey.md`):
+- Slice 1: a hand-verified check of four Mealie symbols, each testing a different edge path, with ground truth from grep and reading only, never from Memex.
+- Then the fixes you chose from its results, test-first, a reviewer pass, a free re-run of the check, and a paid multi-hop eval only with your approval.
+
+Built: slice 1 and three fixes. The reviewer ran after the fixes. The reviewer's findings were not fixed, the check was not re-run into the report, and the paid eval was not run: you chose to close the phase there, since Memex is for a demo.
+
+**Slice 1, the check** (`eval/impact_check.md`): precision was 1.00 at depth 1 and on every CALLS chain. The problems were recall and one noise source:
+
+| Symbol | What it tests | Recall before |
+|---|---|---|
+| `hash_password` | plain calls, depth 3 | 17 of 18 |
+| `get_current_user` | `Depends(...)` | 5 of 10 |
+| `RecipeService.create_one` | calls through `self.service` | 6 of 22 (depth 2) |
+| `Tool` (ORM model) | relationships, use as a value | 13 of 25 |
+
+At depth 2, `Tool` listed 74 more dependents, none correct: the walk kept going from classes reached by REFERENCES.
+
+**Fixes** (each test-first: you reviewed the tests, then red, then green):
+1. **Leaf rule** (`136a516`): a class reached by REFERENCES is not expanded, like a module. `Tool` went from 13 / 87 / 125 dependents at depths 1 / 2 / 3 to 13 at every depth.
+2. **Typed attributes** (`e8fa0f0`): `self.a.m()` and `self.a.b.m()` resolve `exact` when the class types `a` through a property or cached_property's return annotation, or `__init__` assignments (`self.a: C`, `self.a = C(...)`, `self.a = p` with `p: C`). `create_one` went from 3 to 7 of 7 direct callers, and from 6 to 21 of 22 at depth 2.
+3. **USES edges** (`92092c6`, ADR-003): a codebase function or class named as a value (`Depends(f)`, `select(Model)`, construction of a class with no `__init__`), from function bodies, their own defaults and class-body values. A pair REFERENCES already links is not repeated. `get_current_user` went from 5 to 10 of 10 direct dependents, `Tool` from 13 to 23 of 25. You approved three additions to the design: construction without `__init__` counts, REFERENCES pairs are not repeated, and the longest resolvable part of a dotted name is the target.
+
+Not fixed by design: calls and values through local variables (`forgot_password.reset_password`, `parse_recipe_url_bulk`), base-class type arguments, annotations.
+
+**Delegated:**
+| Agent | Prompt (short) | Outcome | Accepted? |
+|---|---|---|---|
+| reviewer (run 1) | The three fix commits against DESIGN sections 7, 9, 10, 13, ADR-003 and the check. Focus on false edges, USES walking the wrong AST parts, the leaf rule with USES, the attribute cache, weak tests. No paid calls | 1 high, 4 medium, 4 low, plus weak tests and four doc mismatches; 8 of 9 reproduced on real code, the ninth with a fake driver; about 99k subagent tokens, 6 minutes | Not fixed: listed below and in DESIGN section 13 |
+
+**Open issues from the reviewer** (none affect the four checked symbols):
+- High: `schedule(self.repo.get_one)` with `repo` a property gives USES of the property, not `Repo.get_one`.
+- Medium: an attribute typed in `__init__` stays typed when another method assigns a different class; whether a node reached in the same step by REFERENCES and another edge is expanded depends on qualname order; class-body names resolve at module scope; a def inside `if` or `try` in a class body is read as class-body values.
+- Low: a function-level import in `__init__` is ignored when typing; `for self.c in ...` does not untype; a classmethod's USES uses typed attributes while its calls do not; an `inferred` call suppresses the receiver's USES.
+- Docs: assigning `Model.x` gives USES; `super().m` and `C(...).m` as values give nothing; `Annotated[X, Depends(f)]` gives nothing; a class-attribute dependency reaches controller classes, not their route methods (ADR-003 says "every route").
+- Weak tests: no property case for USES, nothing for the cases above, and one assertion in `test_uses.py` that cannot fail.
+
+**What went wrong:**
+- I did not predict three test changes before running green: `plainrepo` gained a correct typed-attribute edge, `test_cli.py` counts the same edges, and one impact test hit the default `limit` of 8 after USES grew `User`'s dependents to 9.
+- The first edit of fix 1 used a constant before defining it; the hook caught it.
+- The reviewer found that the USES tests checked mostly the cases I had thought of: H1 is the motivating pattern of fix 3 with a property instead of a parameter.
+
+**What I changed (human edits and overrides):**
+- Approved the plan, chose fixes 1 to 3, approved the USES design and its three additions.
+- Chose not to fix the reviewer's findings and to skip the re-run and the paid eval: Memex is a demo.
+- Asked whether Memex now works well; the answer was "more accurate on these four symbols, with known gaps".
+
+**Decisions / ADRs:** ADR-003 (USES). `graph/model.py` `EdgeKind` and `query/models.py` `ImpactEdge` gained `"USES"`; the contract snapshot was updated.
+
+**Numbers:**
+- 4 commits on `phase-9-impact` plus this entry; about 2.5 hours from the start of the phase to this entry.
+- Tests: 438 unit, 186 Neo4j, 52 real-repo.
+- Mealie re-indexed: 3,442 nodes, 11,712 edges (CALLS 1,934, USES 1,783), 2,993 unresolved calls.
+- No paid eval calls; reviewer about 99k subagent tokens.
+
+**Next:**
+- Phase 8 (demo UI), on `phase-8-demo` from `main`: an interactive graph of the indexed codebase with a small chat that answers through `claude -p` and the Memex tools.
+- Later, if wanted: the reviewer's open issues, the re-run of `eval/impact_check.md`, and the multi-hop eval.

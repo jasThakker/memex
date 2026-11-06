@@ -151,6 +151,12 @@ def test_callees_keep_the_confidence_of_each_edge(indexed: Driver) -> None:
     assert hops(graph) == [
         (f"{USER_REPO}.get_name", f"{ORDER_SERVICE}.owner_name", "inferred", 1),
         (f"{ORDER_SERVICE}.get", f"{ORDER_SERVICE}.owner_name", "exact", 1),
+        (
+            "app.repos.repository_orders.OrderRepository.get_one",
+            f"{ORDER_SERVICE}.get",
+            "exact",
+            2,
+        ),
         (f"{USER_REPO}.get_one", f"{USER_REPO}.get_name", "exact", 2),
     ]
 

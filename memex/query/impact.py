@@ -2,11 +2,13 @@
 
 - The start set is the symbol plus everything it defines, transitively, so the impact of a
   class includes code that calls its methods.
-- Dependents are found by walking CALLS, INHERITS, REFERENCES and IMPORTS edges backwards,
-  breadth first, up to `max_depth`. Each appears once, at its shortest distance, with its
+- Dependents are found by walking CALLS, INHERITS, REFERENCES, IMPORTS and USES edges
+  backwards, breadth first, up to `max_depth`. Each appears once, at its shortest distance, with its
   edge path back to the start set; ties go to the first target by qualname.
 - Modules are leaves: a module that imports a dependent is listed, but what imports that
   module is not followed (otherwise most of a codebase depends on anything by depth 3).
+- A class reached by REFERENCES is a leaf too: a model with a relationship to the start set
+  is listed, but what depends on that model does not depend on the start set through it.
 - The closest `limit` dependents are kept, grouped by layer (None last); `total` counts all.
 - Up to MAX_DOCS doc sections that mention the symbol or a dependent are listed: those on the
   symbol itself first, then those on its members, then by the distance of the closest
@@ -24,7 +26,10 @@ from memex.query.calls import check_depth
 from memex.query.models import Dependent, DocRef, Impact, LayerGroup, PathStep
 from memex.query.symbols import check_limit, resolve_symbol, symbol_ref
 
-IMPACT_EDGES = ["CALLS", "INHERITS", "REFERENCES", "IMPORTS"]
+IMPACT_EDGES = ["CALLS", "INHERITS", "REFERENCES", "IMPORTS", "USES"]
+# A class that only references a dependent does not pass the dependency on to its own
+# dependents, so the walk stops there.
+LEAF_EDGES = {"REFERENCES"}
 MAX_DOCS = 5
 
 _START_SET = "MATCH (:Module|Class|Function {id: $id})-[:DEFINES*0..]->(n) RETURN n.id AS id"
@@ -85,7 +90,8 @@ def walk(
     """(distance of every id reached, the start ids at 0; the dependents in the order found)
 
     Breadth first over IMPACT_EDGES backwards, each node once at its shortest distance, with
-    its edge path back to the start set. Modules are leaves."""
+    its edge path back to the start set. Modules, and classes reached by REFERENCES, are
+    leaves."""
     distance: dict[str, int] = dict.fromkeys(start_ids, 0)
     paths: dict[str, list[PathStep]] = {}
     found: list[Dependent] = []
@@ -111,7 +117,7 @@ def walk(
                     path=paths[row["id"]],
                 )
             )
-            if row["label"] != "Module":
+            if row["label"] != "Module" and row["edge"] not in LEAF_EDGES:
                 frontier.append(row["id"])
     return distance, found
 

@@ -90,7 +90,7 @@ def test_node_and_edge_properties_are_stored_as_in_the_model(driver: Driver) -> 
     )
     props = rows[0]["props"]
     assert props["extractors"] == ["sqlalchemy"]
-    assert (props["files"], props["unresolved_calls"], props["parse_errors"]) == (27, 5, 0)
+    assert (props["files"], props["unresolved_calls"], props["parse_errors"]) == (27, 3, 0)
 
     rows, _, _ = driver.execute_query(
         "MATCH (:Function)-[r:CALLS]->(f:Function {name: 'get_name'}) RETURN r.confidence AS c"

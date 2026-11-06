@@ -178,6 +178,7 @@ Node ids are stable strings: `"{codebase}:{dotted.qualname}"` for code, `"{codeb
 | `INHERITS` | Class -> Class/External | position |
 | `REFERENCES` | Class -> Class | kind (`foreign_key`, `relationship`, ...), attr, line, extractor |
 | `MENTIONS` | Doc -> Module/Class/Function | match (`qualname`, `path`, `backtick_name`) |
+| `USES` | Function/Class -> Function/Class | line (ADR-003, section 9) |
 
 ### Doc chunks and mentions
 
@@ -224,6 +225,7 @@ Best effort, with honest labels. Call sites count when they are inside a functio
 1. A name defined locally in the module: `exact`.
 2. An imported name (`from x import f`, at module level or inside the function): `exact`. Re-exports are followed, also to a name a codebase module re-exports from outside.
 3. `self.x`, `cls.x`, `cls()`, `super().x`, `super(C, self).x`, `C.x` and `C(...).x` where `C` is a class in the codebase: the class (for `super()`, the bases of the method's class or of `C`), then its in-codebase bases depth first: `exact`. `super()` inside a class nested in a method, or with no enclosing class node, is unresolved.
+   - Typed attributes: in `self.a.x` (and `self.a.b.x`, one attribute per step), `a` has the codebase class `C` given by the first of the method's class and its bases, depth first, that types `a`: a `property` or `cached_property` named `a` with return annotation `C`, or, in `__init__`, assignments to `self.a` that all agree on `C` (`self.a: C = ...`, `self.a = C(...)`, or `self.a = p` with the parameter annotated `p: C`). Annotations are read as the module binds them; a string annotation is parsed. `x` is then looked up on `C` and its bases: `exact`; if it is not found, rules 4 to 6 apply. An unannotated parameter, a union, any other assigned value, an assignment outside `__init__`, or a property without a return annotation leaves `a` untyped.
 4. `alias.x` or `alias.sub.x` where `alias` is an imported module: `exact`.
 5. Otherwise, a function or method name that is unique in the codebase: `inferred`. Never for dunder names, names of builtin type methods (`add`, `pop`, `encode`, `get`, ...), a `super()` call, or a bare name bound inside the function or by the module (an assignment, or an import the resolver cannot place).
 6. Otherwise, no edge. The unresolved count is recorded per codebase.
@@ -234,9 +236,14 @@ Best effort, with honest labels. Call sites count when they are inside a functio
 
 Base classes are resolved as the module binds them before the class binds its own name, so `class Base(Base)` and `class Repo(Repo[int])` inherit from the imported class.
 
+**USES (ADR-003).** A codebase function or class named as a value gets a USES edge from the function or class that names it: `Depends(get_current_user)`, `add_task(self.scrape)`, `select(Model)`, `isinstance(x, Model)`, or constructing a class with no `__init__` in the codebase.
+- Read in a function's body (nested defs and lambdas included) and its own parameter defaults, and in a class body's statements other than nested defs and classes. Never in annotations, string constants or a function's own decorators.
+- A read name or dotted name resolves as a call's callee does (rules 1 to 4, typed attributes included), never by a unique name; the longest leading part that resolves to a Function or Class is the target (`Model.save` gives the method, `Model.query.filter` gives `Model`).
+- A name that is the callee of a call with a CALLS edge does not count, nor a symbol naming itself, nor a pair an extractor links by REFERENCES. One edge per pair, at its first line.
+
 Stretch: store 2 to 3 candidates as `ambiguous` edges, hidden by default and shown with `include_ambiguous=True`.
 
-Known weak spot: calls through attributes whose type is only known at runtime, such as `self.repos.recipes.get_one(...)` (a common pattern in apps that inject repositories or services), need type information to resolve, so they are usually `inferred` or unresolved. Section 13 states this as a v1 limit.
+Known weak spot: calls through attributes whose type is only known at runtime, such as an injected object stored without an annotation, need type information to resolve, so they are usually `inferred` or unresolved. Attributes typed in the class itself are resolved (rule 3); section 13 states the rest as a limit.
 
 ## 10. MCP tools
 
@@ -267,9 +274,10 @@ callees(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGrap
     # __init__; a class that only inherits __init__, and a module, have no calls
 
 impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact
-    # reverse traversal over CALLS, INHERITS, REFERENCES and IMPORTS from the
+    # reverse traversal over CALLS, INHERITS, REFERENCES, IMPORTS and USES from the
     # symbol and everything it DEFINES; modules are leaves (their importers are
-    # not followed); the closest `limit` dependents grouped by layer, each with
+    # not followed), and so is a class reached by REFERENCES (what depends on a
+    # model does not depend, through it, on the models it references); the closest `limit` dependents grouped by layer, each with
     # distance and edge path; `total` counts all; up to 5 docs that MENTION the
     # symbol or a dependent: those on the symbol itself first, then on its members,
     # then by the closest dependent; each lists only mentions in the impact set.
@@ -356,8 +364,8 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 Stated openly:
 - Python only.
 - One framework extractor (SQLAlchemy).
-- Name-based call resolution with no type inference. Calls through injected attributes (`self.repos.x.get_one()`) whose method name is shared by several classes get no edge.
-- Local names are not typed either: `with Client(...) as client: client.request()` and `client = Client(); client.request()` give no edge when the method name is shared (found in the Phase 5 live check: httpx's module-level `request()` is not a caller of `Client.request`).
+- Name-based call resolution with no type inference beyond the class's own annotations and constructor calls (section 9, rule 3). Calls through attributes typed some other way (an unannotated parameter, a union such as `C | None`, an assignment outside `__init__`) whose method name is shared by several classes get no edge.
+- Local names are not typed: `with Client(...) as client: client.request()` and `client = Client(); client.request()` give no edge when the method name is shared (found in the Phase 5 live check: httpx's module-level `request()` is not a caller of `Client.request`).
 - Functions and classes defined inside a function get no node of their own; their code counts as part of the enclosing function.
 - Names are resolved at module scope: a base defined in a class body, a nested class called as `self.Inner()`, `cls(...).m()`, and a later outside import that shadows an earlier local class are not resolved as Python would.
 - An outside name re-exported through a star import of an outside module is not followed.
@@ -365,6 +373,8 @@ Stated openly:
 - Full re-index only; incremental indexing comes later.
 - `callers` of a class that only inherits `__init__` is empty: constructor calls are stored on the base's `__init__`, so they cannot be told apart from other subclasses' constructions.
 - Symbol lookup filters on qualname suffixes without using an index; fine at the benchmark sizes (under 400 ms per tool call on Mealie, MCP round trip included).
+- USES misses a value reached through a local variable (`scraper = Scraper(); add_task(scraper.scrape)`), the type arguments of a base class (`Repo[Out, Tool]`), and module-level code. Naming a symbol is not always depending on its behaviour (an `isinstance` check), so USES can over-report.
+- Open issues from the Phase 9 review, not fixed (DEVLOG Phase 9): a method passed through a typed property (`add_task(self.service.scrape)`) gives USES of the property, not the method; an attribute typed in `__init__` stays typed when another method assigns it a different class; a class-body name is resolved at module scope; a def inside `if` or `try` in a class body counts as class-body values; whether a node reached by REFERENCES and another edge in the same step is expanded depends on qualname order; `Annotated[X, Depends(f)]` parameters give no USES; a class-attribute dependency reaches the controller class and its subclasses, not their route methods.
 - Doc mentions are found lexically; a bare word outside backticks never matches. A name inside a call written in backticks (`Depends(get_session)`) is not linked, and bare method names are not linked (section 7).
 - Backtick spans are found outside fences only: a span inside an HTML comment or indented code still links, and a fence opened inside an HTML comment hides the spans after it. A code span that wraps across lines is not linked.
 - The chunker reads only the block rules that decide headings:

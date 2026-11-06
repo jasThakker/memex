@@ -24,5 +24,6 @@ class OrderService(BaseService):
         return OrderOut(id=order.id, user_id=order.user_id)
 
     def owner_name(self, order_id: int) -> str:
-        """Reaches a repository method whose name is unique in the codebase."""
-        return self.repos.users.get_name(self.get(order_id).user_id)
+        """Reaches a repository through a local variable; its method name is unique."""
+        repos = self.repos
+        return repos.users.get_name(self.get(order_id).user_id)

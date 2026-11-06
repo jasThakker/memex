@@ -10,7 +10,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
-EdgeKind = Literal["DEFINES", "IMPORTS", "CALLS", "INHERITS", "REFERENCES", "MENTIONS"]
+EdgeKind = Literal[
+    "DEFINES", "IMPORTS", "CALLS", "INHERITS", "REFERENCES", "MENTIONS", "USES"
+]  # USES: ADR-003
 Confidence = Literal["exact", "inferred", "ambiguous"]
 MentionMatch = Literal["qualname", "path", "backtick_name"]
 
