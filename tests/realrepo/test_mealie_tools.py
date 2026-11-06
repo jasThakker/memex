@@ -95,6 +95,8 @@ def test_what_depends_on_recipe_model(server: FastMCP) -> None:
     assert {d.symbol.layer for d in referencing} == {"db_models"}
     assert {"db_models", "repos"} <= {group.layer for group in impact.layers}
     assert impact.total >= len(dependents(impact))
+    # a class reached by REFERENCES is a leaf: REFERENCES is only ever a dependent's own edge
+    assert all(step.edge != "REFERENCES" for d in dependents(impact) for step in d.path[1:])
 
 
 def test_the_generated_types_rule_is_found_by_search(server: FastMCP) -> None:

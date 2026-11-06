@@ -181,9 +181,12 @@ def test_a_module_starts_from_everything_it_defines(indexed: Driver) -> None:
     ]
 
 
-def test_references_are_followed(indexed: Driver) -> None:
+def test_references_are_followed_one_step(indexed: Driver) -> None:
     impact = impact_of(indexed, "layered_app", "app.db.models.users.User")
 
+    # Order references User, so Order is a dependent; but what depends on Order (users.py
+    # imports it under TYPE_CHECKING, repository_orders imports it) does not depend on User
+    # through it, so a class reached by REFERENCES is a leaf, like a module.
     assert groups(impact) == [
         (
             "db_models",
@@ -191,10 +194,9 @@ def test_references_are_followed(indexed: Driver) -> None:
                 ("app.db.models", 1),
                 ("app.db.models.orders", 1),
                 ("app.db.models.orders.Order", 1),
-                ("app.db.models.users", 2),  # imports Order under TYPE_CHECKING
             ],
         ),
-        ("repos", [("app.repos.repository_users", 1), ("app.repos.repository_orders", 2)]),
+        ("repos", [("app.repos.repository_users", 1)]),
     ]
     assert path_of(impact, "app.db.models.orders.Order") == [
         PathStep(edge="REFERENCES", to="app.db.models.users.User")
@@ -251,11 +253,11 @@ def test_dependents_are_truncated_after_the_closest(indexed: Driver) -> None:
 
 
 def test_a_limit_equal_to_the_total_does_not_truncate(indexed: Driver) -> None:
-    exact = impact_of(indexed, "layered_app", "app.db.models.users.User", limit=6)
-    cut = impact_of(indexed, "layered_app", "app.db.models.users.User", limit=5)
+    exact = impact_of(indexed, "layered_app", "app.db.models.users.User", limit=4)
+    cut = impact_of(indexed, "layered_app", "app.db.models.users.User", limit=3)
 
-    assert (exact.total, exact.truncated) == (6, False)
-    assert (cut.total, cut.truncated) == (6, True)
+    assert (exact.total, exact.truncated) == (4, False)
+    assert (cut.total, cut.truncated) == (4, True)
 
 
 def test_an_ambiguous_symbol_returns_candidates_only(indexed: Driver) -> None:

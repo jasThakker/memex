@@ -269,7 +269,8 @@ callees(codebase: str, symbol: str, depth: int = 1, limit: int = 12) -> CallGrap
 impact_of(codebase: str, symbol: str, max_depth: int = 3, limit: int = 8) -> Impact
     # reverse traversal over CALLS, INHERITS, REFERENCES and IMPORTS from the
     # symbol and everything it DEFINES; modules are leaves (their importers are
-    # not followed); the closest `limit` dependents grouped by layer, each with
+    # not followed), and so is a class reached by REFERENCES (what depends on a
+    # model does not depend, through it, on the models it references); the closest `limit` dependents grouped by layer, each with
     # distance and edge path; `total` counts all; up to 5 docs that MENTION the
     # symbol or a dependent: those on the symbol itself first, then on its members,
     # then by the closest dependent; each lists only mentions in the impact set.
