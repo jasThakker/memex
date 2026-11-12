@@ -25,7 +25,9 @@ ANSWER_BLOCK = re.compile(r"```json(?![\w-])[ \t]*\n?(.*?)```", re.DOTALL | re.I
 LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 CONDITION_A_TOOLS = frozenset({"Read", "Grep", "Glob"})
 GRAPH_SERVER = "memex"
-TRANSCRIPT_NAME = re.compile(r"^(?P<qid>q\d+|baseline)-(?P<condition>[A-Z])-(?P<run>\d+)\.jsonl$")
+TRANSCRIPT_NAME = re.compile(
+    r"^(?P<qid>[a-z]\d+|baseline)-(?P<condition>[A-Z])-(?P<run>\d+)\.jsonl$"
+)
 USAGE_FIELDS = (
     "input_tokens",
     "output_tokens",

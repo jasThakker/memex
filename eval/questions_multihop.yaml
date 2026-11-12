@@ -1,0 +1,186 @@
+# Multi-hop evaluation questions for Mealie v3.30.0 (DESIGN.md section 14 format).
+# Drafted by an agent on 2026-11-11 from grep, reading and ast scripts only (never from
+# Memex), spot-checked, not hand-verified. Every answer was derived twice: an ast scan of
+# every name reference with its enclosing function or class, then a grep -w pass whose
+# extra hits were all comments, docstrings or strings inside already listed items.
+# Paths are relative to vendor/mealie. Qualnames name methods as module.Class.method; a
+# call inside a nested function counts for the enclosing function.
+
+- id: m01
+  category: multi_hop
+  question: "Which functions or methods call `hash_password` (defined in mealie/core/security/security.py) directly, or reach it through a chain of calls of at most 3 steps (a caller of a caller of a caller)? List functions and methods only, not modules or classes. Code at module level does not count."
+  expected:
+    symbols:
+      - mealie.repos.seed.init_users.default_user_init
+      - mealie.repos.seed.init_users.dev_users
+      - mealie.routes.admin.admin_management_users.AdminUserManagementRoutes.create_one
+      - mealie.routes.users.crud.UserController.update_password
+      - mealie.scripts.change_password.main
+      - mealie.services.user_services.password_reset_service.PasswordResetService.reset_password
+      - mealie.services.user_services.registration_service.RegistrationService._create_new_user
+      - mealie.db.init_db.init_db
+      - mealie.services.user_services.registration_service.RegistrationService.register_user
+      - mealie.routes.users.forgot_password.reset_password
+      - mealie.db.init_db.main
+      - mealie.routes.users.registration.RegistrationController.register_new_user
+    docs: []
+  evidence: "Step 1: default_user_init -> mealie/repos/seed/init_users.py:56; dev_users -> mealie/repos/seed/init_users.py:16,25,34,43; AdminUserManagementRoutes.create_one -> mealie/routes/admin/admin_management_users.py:51 (security.hash_password); UserController.update_password -> mealie/routes/users/crud.py:52; change_password.main -> mealie/scripts/change_password.py:40; PasswordResetService.reset_password -> mealie/services/user_services/password_reset_service.py:61; RegistrationService._create_new_user -> mealie/services/user_services/registration_service.py:35. Step 2: init_db.init_db calls default_user_init -> mealie/db/init_db.py:40; RegistrationService.register_user calls self._create_new_user -> mealie/services/user_services/registration_service.py:113; forgot_password.reset_password calls f_service.reset_password (f_service = PasswordResetService(session)) -> mealie/routes/users/forgot_password.py:28. Step 3: init_db.main calls init_db -> mealie/db/init_db.py:135; RegistrationController.register_new_user calls registration_service.register_user -> mealie/routes/users/registration.py:33."
+  note: "Depth 4 is out of range: mealie.app.lifespan_fn (app.py:67) and AlchemyExporter.restore (services/backups_v2/alchemy_exporter.py:260) call init_db.main(). UserController.update_password, AdminUserManagementRoutes.create_one, change_password.main (only from the __main__ block) and the route handlers have no callers in code. default_user_init also calls dev_users, both already step 1. Extends eval/impact_check.md section 1."
+
+- id: m02
+  category: multi_hop
+  question: "Which functions or methods call `RecipeService.create_one` (mealie/services/recipe/recipe_service.py) directly, or call a function or method that does (up to 2 steps)? Count a method handed off to be run later (for example passed to a background task) as called by the function that hands it off, and a call made inside a nested function as made by the enclosing method. Only count calls that really reach `RecipeService.create_one`, not `create_one` methods of other classes. List functions and methods only."
+  expected:
+    symbols:
+      - mealie.services.recipe.recipe_service.RecipeService.create_from_mealie_export
+      - mealie.services.recipe.recipe_service.RecipeService.create_from_zip
+      - mealie.services.recipe.ai_recipe_service.AIRecipeService.create_from_ai
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController._finish_recipe_from_web
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.create_one
+      - mealie.services.migrations._migration_base.BaseMigrator.import_recipes_to_database
+      - mealie.services.scraper.recipe_bulk_scraper.RecipeBulkScraperService.scrape
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController._create_recipe_from_mealie_export
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.create_recipe_from_zip
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController._create_recipe_with_ai
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController._create_recipe_from_web
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.parse_recipe_url_bulk
+      - mealie.services.migrations.chowdown.ChowdownMigrator._migrate
+      - mealie.services.migrations.cookn.CooknMigrator._process_cookbook
+      - mealie.services.migrations.copymethat.CopyMeThatMigrator._migrate
+      - mealie.services.migrations.mealie_alpha.MealieAlphaMigrator._migrate
+      - mealie.services.migrations.myrecipebox.MyRecipeBoxMigrator._migrate
+      - mealie.services.migrations.nextcloud.NextcloudMigrator._migrate
+      - mealie.services.migrations.paprika.PaprikaMigrator._migrate
+      - mealie.services.migrations.plantoeat.PlanToEatMigrator._migrate
+      - mealie.services.migrations.recipekeeper.RecipeKeeperMigrator._migrate
+      - mealie.services.migrations.tandoor.TandoorMigrator._migrate
+    docs: []
+  evidence: "Step 1: RecipeService.create_from_mealie_export -> mealie/services/recipe/recipe_service.py:512; create_from_zip -> recipe_service.py:543; AIRecipeService.create_from_ai -> mealie/services/recipe/ai_recipe_service.py:60 (subclass of RecipeService); RecipeController._finish_recipe_from_web -> mealie/routes/recipe/recipe_crud_routes.py:414 and RecipeController.create_one -> recipe_crud_routes.py:655 (self.service is the cached_property -> RecipeService at mealie/routes/recipe/_base.py:51); BaseMigrator.import_recipes_to_database -> mealie/services/migrations/_migration_base.py:223 (self.recipe_service = RecipeService(...) at :80); RecipeBulkScraperService.scrape -> mealie/services/scraper/recipe_bulk_scraper.py:111 (service: RecipeService param at :25). Step 2: _create_recipe_from_mealie_export -> recipe_crud_routes.py:399 (nested create); create_recipe_from_zip -> :531; _create_recipe_with_ai -> :495 (nested create, ai_service.create_from_ai); _create_recipe_from_web -> :376 (nested create, self._finish_recipe_from_web); parse_recipe_url_bulk -> :513 (bg_tasks.add_task(bulk_scraper.scrape, bulk)); the ten migrator methods call self.import_recipes_to_database at chowdown.py:48, cookn.py:390, copymethat.py:112, mealie_alpha.py:90, myrecipebox.py:117, nextcloud.py:92, paprika.py:71, plantoeat.py:166, recipekeeper.py:100, tandoor.py:119 (all in mealie/services/migrations/)."
+  note: "All other create_one calls (self.mixins.create_one on HttpRepo, controller_labels.py:59 and seeders.py:96 on MultiPurposeLabelService) are other classes. services/scraper/scraper.py:55 scraper.scrape is RecipeScraper.scrape, not RecipeBulkScraperService.scrape. RecipeController.create_one has no callers in code. Extends eval/impact_check.md section 3 (same 22)."
+
+- id: m03
+  category: multi_hop
+  question: "Which functions, methods and classes depend on the FastAPI dependency function `get_auth_token` (mealie/core/dependencies/dependencies.py), up to 3 steps? A use is a direct call, or passing the function itself to `Depends(...)` (as a parameter default, a class attribute, or in a `dependencies=[...]` list). Step 1 is everything that uses `get_auth_token`; step 2 is everything that uses a step-1 function or method; step 3 is everything that uses a step-2 function or method. Do not continue from a class (ignore subclasses), do not count `Depends(SomeClass(...))` with an instance, and ignore code at module level. List functions, methods and classes, not modules."
+  expected:
+    symbols:
+      - mealie.core.dependencies.dependencies.try_get_current_user
+      - mealie.core.dependencies.dependencies.get_current_user
+      - mealie.core.dependencies.dependencies.get_integration_id
+      - mealie.routes.auth.auth.refresh_token
+      - mealie.core.dependencies.dependencies.get_admin_user
+      - mealie.routes._base.routers.UserAPIRouter.__init__
+      - mealie.routes._base.permissions.RequirePermission.__call__
+      - mealie.routes._base.base_controllers.BaseUserController
+      - mealie.routes.spa.serve_recipe_with_meta
+      - mealie.routes.validators.validators.validate_user
+      - mealie.routes.validators.validators.validate_user_email
+      - mealie.routes._base.base_controllers.BaseAdminController
+      - mealie.routes._base.routers.AdminAPIRouter.__init__
+    docs: []
+  evidence: "Step 1 (Depends(get_auth_token)): try_get_current_user -> mealie/core/dependencies/dependencies.py:93; get_current_user -> dependencies.py:103; get_integration_id -> dependencies.py:141; refresh_token -> mealie/routes/auth/auth.py:393. Step 2: get_admin_user Depends(get_current_user) -> dependencies.py:153; UserAPIRouter.__init__ dependencies=[Depends(get_current_user)] -> mealie/routes/_base/routers.py:24; RequirePermission.__call__ Depends(get_current_user) -> mealie/routes/_base/permissions.py:63; BaseUserController class attributes Depends(get_current_user) and Depends(get_integration_id) -> mealie/routes/_base/base_controllers.py:138,139; serve_recipe_with_meta Depends(try_get_current_user) -> mealie/routes/spa/__init__.py:245; validate_user -> mealie/routes/validators/validators.py:20; validate_user_email -> validators.py:32 (both Depends(try_get_current_user)). Step 3: BaseAdminController Depends(get_admin_user) -> base_controllers.py:172; AdminAPIRouter.__init__ dependencies=[Depends(get_admin_user)] -> routers.py:17."
+  note: "Excluded by the question's scope: permissions.require (Depends(RequirePermission(perm)) with an instance, permissions.py:72); routes.spa.mount_spa, which registers serve_recipe_with_meta as a route handler without calling it (spa/__init__.py:284); module-level UserAPIRouter(...) and AdminAPIRouter(...) instances; every subclass of BaseUserController and BaseAdminController. try_get_current_user also calls get_current_user (dependencies.py:97); it is step 1 already. Extends eval/impact_check.md section 2."
+
+- id: m04
+  category: multi_hop
+  question: "Which classes and functions or methods in the backend use the SQLAlchemy model class `Tool` (mealie/db/models/recipe/tool.py) directly? Count a `relationship()` to it (by the class or by its name as a string), using it as a value in code (a query such as `select(Tool)`, an expression such as `Tool.id == x`, `aliased(Tool)`, `selectinload(Tool.recipes)`, or as an argument), and naming it as a type parameter of a base class. Do not count type annotations alone, import lines, the `Tool` class itself, or anything under mealie/alembic. List classes and functions or methods, not modules."
+  expected:
+    symbols:
+      - mealie.db.models.group.group.Group
+      - mealie.db.models.recipe.recipe.RecipeModel
+      - mealie.db.models.household.household.Household
+      - mealie.db.models.household.cookbook.CookBook
+      - mealie.repos.repository_factory.RepositoryTools
+      - mealie.repos.repository_factory.RepositoryTools._query
+      - mealie.repos.repository_factory.RepositoryTools.get_empty
+      - mealie.repos.repository_factory.AllRepositories.tools
+      - mealie.repos.repository_recipes.RepositoryRecipes.update
+      - mealie.repos.repository_recipes.RepositoryRecipes.page_all
+      - mealie.repos.repository_recipes.RepositoryRecipes._build_recipe_filter
+      - mealie.repos._recipe_suggestions.RecipeSuggestionMixin.find_suggested_recipes
+      - mealie.repos.repository_household.RepositoryHousehold.statistics
+      - mealie.schema.recipe.recipe_tool.RecipeToolOut.loader_options
+      - mealie.schema.recipe.recipe_tool.RecipeToolResponse.loader_options
+    docs: []
+  evidence: "Group relationship(\"Tool\") -> mealie/db/models/group/group.py:95; RecipeModel relationship(\"Tool\") -> mealie/db/models/recipe/recipe.py:103; Household relationship(\"Tool\") -> mealie/db/models/household/household.py:77-78; CookBook relationship(Tool) -> mealie/db/models/household/cookbook.py:47; RepositoryTools(GroupRepositoryGeneric[RecipeToolOut, Tool]) -> mealie/repos/repository_factory.py:171; RepositoryTools._query -> repository_factory.py:176-180; get_empty select(Tool) -> repository_factory.py:183; AllRepositories.tools -> repository_factory.py:298; RepositoryRecipes.update -> mealie/repos/repository_recipes.py:301; page_all -> repository_recipes.py:365; _build_recipe_filter -> repository_recipes.py:466,468; RecipeSuggestionMixin.find_suggested_recipes aliased(Tool) -> mealie/repos/_recipe_suggestions.py:344; RepositoryHousehold.statistics model_count(Tool) -> mealie/repos/repository_household.py:107; RecipeToolOut.loader_options -> mealie/schema/recipe/recipe_tool.py:39; RecipeToolResponse.loader_options -> recipe_tool.py:55-58."
+  note: "Excluded: RepositoryRecipes._resolve_organizer (repository_recipes.py:240) names Tool only in a parameter annotation; the alembic revisions 86054b40fd06 and b9e516e2d3b3 define their own local Tool classes; the association tables in tool.py are module level. Same set as eval/impact_check.md section 4 minus the annotation-only method."
+
+- id: m05
+  category: multi_hop
+  question: "Which functions or methods call `RecipeService.can_update` (mealie/services/recipe/recipe_service.py) directly, or reach it through a chain of calls of at most 3 steps? Only count calls that really reach the recipe service's methods, not methods with the same name on other classes. List functions and methods only."
+  expected:
+    symbols:
+      - mealie.services.recipe.recipe_service.RecipeService._pre_update_check
+      - mealie.services.recipe.recipe_service.RecipeService.update_recipe_image
+      - mealie.services.recipe.recipe_service.RecipeService.delete_recipe_image
+      - mealie.services.recipe.recipe_service.RecipeService.update_one
+      - mealie.services.recipe.recipe_service.RecipeService.patch_one
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.update_recipe_image
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.delete_recipe_image
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.update_one
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.update_many
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.patch_one
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.patch_many
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController.scrape_image_url
+      - mealie.routes.recipe.recipe_crud_routes.RecipeController._save_recipe_asset
+    docs: []
+  evidence: "Step 1 (self.can_update): RecipeService._pre_update_check -> mealie/services/recipe/recipe_service.py:661; update_recipe_image -> recipe_service.py:762; delete_recipe_image -> recipe_service.py:772. Step 2: RecipeService.update_one self._pre_update_check -> recipe_service.py:742; RecipeService.patch_one -> recipe_service.py:782; RecipeController.update_recipe_image self.service.update_recipe_image -> mealie/routes/recipe/recipe_crud_routes.py:883; RecipeController.delete_recipe_image -> recipe_crud_routes.py:897 (self.service is the cached_property -> RecipeService, mealie/routes/recipe/_base.py:51). Step 3 (self.service.update_one / patch_one): RecipeController.update_one -> recipe_crud_routes.py:701; update_many -> :726; patch_one -> :749; patch_many -> :774; scrape_image_url -> :866; _save_recipe_asset -> :953."
+  note: "update_one and patch_one are defined in about 25 places; every other update_one call in the backend goes through self.mixins (HttpRepo) or AdminGroupAIProviderController._mixins. Depth 4 is out of range: RecipeController.upload_recipe_asset (:967) and create_recipe_asset_from_url (:1000) call _save_recipe_asset. can_delete is a different method."
+
+- id: m06
+  category: multi_hop
+  question: "Which functions or methods call `DataMatcher.find_unit_match` (mealie/services/parser_services/_base.py) directly, or call a function or method that does (up to 2 steps)? List functions and methods only."
+  expected:
+    symbols:
+      - mealie.services.migrations.cookn.CooknMigrator._parse_units_table
+      - mealie.services.migrations.cookn.CooknMigrator._parse_ingredients
+      - mealie.services.parser_services._base.ABCIngredientParser.find_ingredient_match
+      - mealie.services.parser_services.brute.process.parse
+      - mealie.services.recipe.recipe_service.RecipeService._transform_unit
+      - mealie.services.migrations.cookn.CooknMigrator._process_cookbook
+      - mealie.services.migrations.cookn.CooknMigrator._process_recipe_document
+      - mealie.services.parser_services.ingredient_parser.BruteForceParser.parse_one
+      - mealie.services.parser_services.ingredient_parser.NLPParser._convert_ingredient
+      - mealie.services.parser_services.openai.parser.OpenAIParser._convert_ingredient
+      - mealie.services.recipe.recipe_service.RecipeService._process_recipe_data
+    docs: []
+  evidence: "Step 1: CooknMigrator._parse_units_table self.matcher.find_unit_match -> mealie/services/migrations/cookn.py:93; CooknMigrator._parse_ingredients -> cookn.py:195; ABCIngredientParser.find_ingredient_match self.data_matcher.find_unit_match -> mealie/services/parser_services/_base.py:172; brute.process.parse parser.data_matcher.find_unit_match -> mealie/services/parser_services/brute/process.py:197; RecipeService._transform_unit matcher.find_unit_match -> mealie/services/recipe/recipe_service.py:376,378. Step 2: CooknMigrator._process_cookbook self._parse_units_table -> cookn.py:358; CooknMigrator._process_recipe_document self._parse_ingredients -> cookn.py:346; BruteForceParser.parse_one brute.parse and self.find_ingredient_match -> mealie/services/parser_services/ingredient_parser.py:42,55; NLPParser._convert_ingredient self.find_ingredient_match -> ingredient_parser.py:290; OpenAIParser._convert_ingredient -> mealie/services/parser_services/openai/parser.py:138; RecipeService._process_recipe_data self._transform_unit -> recipe_service.py:436."
+  note: "Reading units_by_alias (cookn.py:89, openai/parser.py:141) is not a call of find_unit_match. find_food_match callers (ShoppingListService.find_matching_label, CooknMigrator._parse_foods_table, NLPParser._convert_extra_ingredients, OpenAIParser._convert_substitutes, RecipeService._transform_food) are a different method. _process_recipe_document also exists in copymethat.py and tandoor.py; only the cookn one calls _parse_ingredients. The many other parse methods (UnitConverter.parse, scraper parse, date_parser.parse) are unrelated."
+
+- id: m07
+  category: multi_hop
+  question: "Which classes and functions or methods use the SQLAlchemy model class `UserToRecipe` (mealie/db/models/users/user_to_recipe.py) directly? Count using it as a value in code (queries, filters, `delete(...)`, `joinedload(...)`, as an argument, or `UserToRecipe.__tablename__` as a relationship's `secondary`) and naming it as a type parameter of a base class. Do not count type annotations alone, import lines, anything in user_to_recipe.py itself, or anything under mealie/alembic. List classes and functions or methods, not modules."
+  expected:
+    symbols:
+      - mealie.db.models.recipe.recipe.RecipeModel
+      - mealie.db.models.recipe.recipe.calculate_rating
+      - mealie.db.models.users.users.User
+      - mealie.repos.repository_factory.AllRepositories.user_ratings
+      - mealie.repos.repository_recipes.RepositoryRecipes._get_rating_col_alias
+      - mealie.repos.repository_recipes.RepositoryRecipes._delete_recipe
+      - mealie.repos.repository_users.RepositoryUserRatings
+      - mealie.repos.repository_users.RepositoryUserRatings.get_by_user
+      - mealie.repos.repository_users.RepositoryUserRatings.get_by_recipe
+      - mealie.repos.repository_users.RepositoryUserRatings.get_by_user_and_recipe
+      - mealie.schema.user.user.UserRatingOut.loader_options
+    docs: []
+  evidence: "RecipeModel secondary=UserToRecipe.__tablename__ -> mealie/db/models/recipe/recipe.py:64,70; calculate_rating session.query(sa.func.avg(UserToRecipe.rating)) -> recipe.py:305-306; User secondary=UserToRecipe.__tablename__ -> mealie/db/models/users/users.py:110,116; AllRepositories.user_ratings -> mealie/repos/repository_factory.py:337; RepositoryRecipes._get_rating_col_alias -> mealie/repos/repository_recipes.py:76-82; RepositoryRecipes._delete_recipe sa.delete(UserToRecipe) -> repository_recipes.py:151; RepositoryUserRatings(GroupRepositoryGeneric[UserRatingOut, UserToRecipe]) -> mealie/repos/repository_users.py:78; get_by_user -> repository_users.py:83,85; get_by_recipe -> :91,93; get_by_user_and_recipe -> :99; UserRatingOut.loader_options joinedload(UserToRecipe.recipe) -> mealie/schema/user/user.py:101."
+  note: "Excluded by scope: update_recipe_rating (annotation only) and update_recipe_rating_on_insert_or_delete (event.listens_for decorator) in user_to_recipe.py itself; the primaryjoin strings in RecipeModel (recipe.py:71) and User (users.py:117) belong to items already listed."
+
+- id: m08
+  category: multi_hop
+  question: "Which classes inherit from `BasePublicController` (mealie/routes/_base/base_controllers.py), directly or indirectly, at any depth? List classes only."
+  expected:
+    symbols:
+      - mealie.routes._base.base_controllers.BasePublicGroupExploreController
+      - mealie.routes.users.registration.RegistrationController
+      - mealie.routes._base.base_controllers.BasePublicHouseholdExploreController
+      - mealie.routes.explore.controller_public_foods.PublicFoodsController
+      - mealie.routes.explore.controller_public_households.PublicHouseholdsController
+      - mealie.routes.explore.controller_public_organizers.PublicCategoriesController
+      - mealie.routes.explore.controller_public_organizers.PublicTagsController
+      - mealie.routes.explore.controller_public_organizers.PublicToolsController
+      - mealie.routes.explore.controller_public_cookbooks.PublicCookbooksController
+      - mealie.routes.explore.controller_public_recipes.PublicRecipesController
+    docs: []
+  evidence: "Direct: BasePublicGroupExploreController -> mealie/routes/_base/base_controllers.py:90; RegistrationController -> mealie/routes/users/registration.py:17. Via BasePublicGroupExploreController: BasePublicHouseholdExploreController -> base_controllers.py:113; PublicFoodsController -> mealie/routes/explore/controller_public_foods.py:14; PublicHouseholdsController -> mealie/routes/explore/controller_public_households.py:14; PublicCategoriesController -> mealie/routes/explore/controller_public_organizers.py:19; PublicTagsController -> controller_public_organizers.py:49; PublicToolsController -> controller_public_organizers.py:79. Via BasePublicHouseholdExploreController: PublicCookbooksController -> mealie/routes/explore/controller_public_cookbooks.py:17; PublicRecipesController -> mealie/routes/explore/controller_public_recipes.py:22."
+  note: "Control question: three levels of plain inheritance, where text search can iterate. No other class in mealie/ names these three bases."

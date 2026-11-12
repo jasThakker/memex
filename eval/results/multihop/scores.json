@@ -1,0 +1,2190 @@
+{
+  "summary": {
+    "A": {
+      "runs": 24,
+      "invalid": 0,
+      "answered": 24,
+      "errors": 0,
+      "precision": 0.9703282828282829,
+      "recall": 0.9953282828282828,
+      "f1": 0.9810551163812034,
+      "by_category": {
+        "multi_hop": {
+          "precision": 0.9703282828282829,
+          "recall": 0.9953282828282828,
+          "f1": 0.9810551163812034
+        }
+      },
+      "usage": {
+        "input_tokens": 282,
+        "output_tokens": 79122,
+        "cache_creation_tokens": 350099,
+        "cache_read_tokens": 1647237,
+        "total_input": 1997618,
+        "cost_usd": 2.356904,
+        "turns": 269,
+        "duration_ms": 609380
+      },
+      "estimated_usage": 0
+    },
+    "B": {
+      "runs": 24,
+      "invalid": 0,
+      "answered": 24,
+      "errors": 0,
+      "precision": 0.9910714285714286,
+      "recall": 0.9895833333333334,
+      "f1": 0.9899355877616747,
+      "by_category": {
+        "multi_hop": {
+          "precision": 0.9910714285714286,
+          "recall": 0.9895833333333334,
+          "f1": 0.9899355877616747
+        }
+      },
+      "usage": {
+        "input_tokens": 228,
+        "output_tokens": 44345,
+        "cache_creation_tokens": 207638,
+        "cache_read_tokens": 1016382,
+        "total_input": 1224248,
+        "cost_usd": 1.376096,
+        "turns": 164,
+        "duration_ms": 329812
+      },
+      "estimated_usage": 0
+    }
+  },
+  "baselines": {
+    "A": {
+      "error": false,
+      "problem": null,
+      "tools": [
+        "Glob",
+        "Grep",
+        "Read"
+      ],
+      "mcp_servers": [],
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 4,
+        "cache_creation_tokens": 2377,
+        "cache_read_tokens": 3223,
+        "total_input": 5602,
+        "cost_usd": 0.009874,
+        "turns": 1,
+        "duration_ms": 1209
+      }
+    },
+    "B": {
+      "error": false,
+      "problem": null,
+      "tools": [
+        "Read",
+        "mcp__memex__callees",
+        "mcp__memex__callers",
+        "mcp__memex__find_symbol",
+        "mcp__memex__impact_of",
+        "mcp__memex__list_codebases",
+        "mcp__memex__search_docs"
+      ],
+      "mcp_servers": [
+        [
+          "memex",
+          "connected"
+        ]
+      ],
+      "usage": {
+        "input_tokens": 2,
+        "output_tokens": 4,
+        "cache_creation_tokens": 2744,
+        "cache_read_tokens": 2969,
+        "total_input": 5715,
+        "cost_usd": 0.011317,
+        "turns": 1,
+        "duration_ms": 1285
+      }
+    }
+  },
+  "runs": [
+    {
+      "id": "m01",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 2742,
+        "cache_creation_tokens": 22458,
+        "cache_read_tokens": 56683,
+        "total_input": 79151,
+        "cost_usd": 0.12294,
+        "turns": 13,
+        "duration_ms": 22716
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 9
+      }
+    },
+    {
+      "id": "m01",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 2689,
+        "cache_creation_tokens": 19051,
+        "cache_read_tokens": 56040,
+        "total_input": 75101,
+        "cost_usd": 0.108718,
+        "turns": 12,
+        "duration_ms": 19479
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 8
+      }
+    },
+    {
+      "id": "m01",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3270,
+        "cache_creation_tokens": 23024,
+        "cache_read_tokens": 85633,
+        "total_input": 108669,
+        "cost_usd": 0.133383,
+        "turns": 14,
+        "duration_ms": 25374
+      },
+      "tool_calls": {
+        "Grep": 4,
+        "Read": 9
+      }
+    },
+    {
+      "id": "m01",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "f1": 0.9565217391304348
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "f1": 0.9565217391304348
+      },
+      "missed": [
+        "mealie.routes.users.forgot_password.reset_password"
+      ],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 840,
+        "cache_creation_tokens": 3732,
+        "cache_read_tokens": 17651,
+        "total_input": 21389,
+        "cost_usd": 0.025105,
+        "turns": 3,
+        "duration_ms": 7284
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m01",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "f1": 0.9565217391304348
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "f1": 0.9565217391304348
+      },
+      "missed": [
+        "mealie.routes.users.forgot_password.reset_password"
+      ],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 798,
+        "cache_creation_tokens": 2268,
+        "cache_read_tokens": 19115,
+        "total_input": 21389,
+        "cost_usd": 0.018975,
+        "turns": 3,
+        "duration_ms": 6437
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m01",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "f1": 0.9565217391304348
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 0.9166666666666666,
+        "f1": 0.9565217391304348
+      },
+      "missed": [
+        "mealie.routes.users.forgot_password.reset_password"
+      ],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 810,
+        "cache_creation_tokens": 1558,
+        "cache_read_tokens": 19825,
+        "total_input": 21389,
+        "cost_usd": 0.016327,
+        "turns": 3,
+        "duration_ms": 6586
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m02",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9545454545454546,
+        "recall": 0.9545454545454546,
+        "f1": 0.9545454545454546
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9545454545454546,
+        "recall": 0.9545454545454546,
+        "f1": 0.9545454545454546
+      },
+      "missed": [
+        "mealie.services.migrations.cookn.CooknMigrator._process_cookbook"
+      ],
+      "extra": [
+        "mealie.services.migrations.cookn.CooknMigrator._migrate"
+      ],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 4467,
+        "cache_creation_tokens": 24090,
+        "cache_read_tokens": 87916,
+        "total_input": 112018,
+        "cost_usd": 0.149846,
+        "turns": 14,
+        "duration_ms": 27760
+      },
+      "tool_calls": {
+        "Grep": 7,
+        "Read": 6
+      }
+    },
+    {
+      "id": "m02",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 5208,
+        "cache_creation_tokens": 24023,
+        "cache_read_tokens": 116730,
+        "total_input": 140767,
+        "cost_usd": 0.159873,
+        "turns": 13,
+        "duration_ms": 36661
+      },
+      "tool_calls": {
+        "Grep": 8,
+        "Read": 4
+      }
+    },
+    {
+      "id": "m02",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 5085,
+        "cache_creation_tokens": 25820,
+        "cache_read_tokens": 118202,
+        "total_input": 144036,
+        "cost_usd": 0.165978,
+        "turns": 14,
+        "duration_ms": 32430
+      },
+      "tool_calls": {
+        "Grep": 8,
+        "Read": 5
+      }
+    },
+    {
+      "id": "m02",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 16,
+        "output_tokens": 3222,
+        "cache_creation_tokens": 10417,
+        "cache_read_tokens": 79535,
+        "total_input": 89968,
+        "cost_usd": 0.081874,
+        "turns": 12,
+        "duration_ms": 23987
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__callers": 4,
+        "mcp__memex__find_symbol": 2,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "m02",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 24,
+        "output_tokens": 4034,
+        "cache_creation_tokens": 13232,
+        "cache_read_tokens": 152209,
+        "total_input": 165465,
+        "cost_usd": 0.108537,
+        "turns": 17,
+        "duration_ms": 30166
+      },
+      "tool_calls": {
+        "Read": 5,
+        "mcp__memex__callers": 5,
+        "mcp__memex__find_symbol": 3,
+        "mcp__memex__impact_of": 2,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m02",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 16,
+        "output_tokens": 3468,
+        "cache_creation_tokens": 11907,
+        "cache_read_tokens": 89166,
+        "total_input": 101089,
+        "cost_usd": 0.091257,
+        "turns": 11,
+        "duration_ms": 23728
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__callers": 4,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 2,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m03",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.65,
+        "recall": 1.0,
+        "f1": 0.787878787878788
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.65,
+        "recall": 1.0,
+        "f1": 0.787878787878788
+      },
+      "missed": [],
+      "extra": [
+        "tests.integration_tests.test_spa.test_spa_serve_recipe_with_meta",
+        "tests.integration_tests.test_spa.test_spa_serve_recipe_with_meta_invalid_data",
+        "tests.unit_tests.core.test_dependencies.test_auth_token_comes_from_the_authorization_header",
+        "tests.unit_tests.core.test_dependencies.test_auth_token_falls_back_to_the_session_cookie",
+        "tests.unit_tests.core.test_dependencies.test_authorization_header_wins_over_the_cookie",
+        "tests.unit_tests.core.test_dependencies.test_no_credential_yields_an_empty_token",
+        "tests.unit_tests.core.test_dependencies.test_unrelated_cookies_are_ignored"
+      ],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 4603,
+        "cache_creation_tokens": 23706,
+        "cache_read_tokens": 84741,
+        "total_input": 108461,
+        "cost_usd": 0.149356,
+        "turns": 13,
+        "duration_ms": 32931
+      },
+      "tool_calls": {
+        "Grep": 5,
+        "Read": 7
+      }
+    },
+    {
+      "id": "m03",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3582,
+        "cache_creation_tokens": 12389,
+        "cache_read_tokens": 60019,
+        "total_input": 72420,
+        "cost_usd": 0.091402,
+        "turns": 11,
+        "duration_ms": 27031
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 7
+      }
+    },
+    {
+      "id": "m03",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 3782,
+        "cache_creation_tokens": 11721,
+        "cache_read_tokens": 78945,
+        "total_input": 90680,
+        "cost_usd": 0.092627,
+        "turns": 13,
+        "duration_ms": 28123
+      },
+      "tool_calls": {
+        "Grep": 5,
+        "Read": 7
+      }
+    },
+    {
+      "id": "m03",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9285714285714286,
+        "recall": 1.0,
+        "f1": 0.962962962962963
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9285714285714286,
+        "recall": 1.0,
+        "f1": 0.962962962962963
+      },
+      "missed": [],
+      "extra": [
+        "mealie.routes.spa.mount_spa"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1569,
+        "cache_creation_tokens": 16904,
+        "cache_read_tokens": 17930,
+        "total_input": 34840,
+        "cost_usd": 0.085111,
+        "turns": 3,
+        "duration_ms": 12538
+      },
+      "tool_calls": {
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m03",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9285714285714286,
+        "recall": 1.0,
+        "f1": 0.962962962962963
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9285714285714286,
+        "recall": 1.0,
+        "f1": 0.962962962962963
+      },
+      "missed": [],
+      "extra": [
+        "mealie.routes.spa.mount_spa"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1439,
+        "cache_creation_tokens": 15304,
+        "cache_read_tokens": 19534,
+        "total_input": 34844,
+        "cost_usd": 0.077571,
+        "turns": 3,
+        "duration_ms": 12164
+      },
+      "tool_calls": {
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m03",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9285714285714286,
+        "recall": 1.0,
+        "f1": 0.962962962962963
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9285714285714286,
+        "recall": 1.0,
+        "f1": 0.962962962962963
+      },
+      "missed": [],
+      "extra": [
+        "mealie.routes.spa.mount_spa"
+      ],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1543,
+        "cache_creation_tokens": 14594,
+        "cache_read_tokens": 20240,
+        "total_input": 34840,
+        "cost_usd": 0.075842,
+        "turns": 3,
+        "duration_ms": 11762
+      },
+      "tool_calls": {
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m04",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9333333333333333,
+        "recall": 0.9333333333333333,
+        "f1": 0.9333333333333333
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9333333333333333,
+        "recall": 0.9333333333333333,
+        "f1": 0.9333333333333333
+      },
+      "missed": [
+        "mealie.db.models.household.cookbook.CookBook"
+      ],
+      "extra": [
+        "mealie.db.models.household.cookbook.CookBookModel"
+      ],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3418,
+        "cache_creation_tokens": 11401,
+        "cache_read_tokens": 66228,
+        "total_input": 77641,
+        "cost_usd": 0.086431,
+        "turns": 13,
+        "duration_ms": 67918
+      },
+      "tool_calls": {
+        "Grep": 9,
+        "Read": 3
+      }
+    },
+    {
+      "id": "m04",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 3056,
+        "cache_creation_tokens": 9779,
+        "cache_read_tokens": 37630,
+        "total_input": 47417,
+        "cost_usd": 0.073455,
+        "turns": 8,
+        "duration_ms": 20314
+      },
+      "tool_calls": {
+        "Grep": 7
+      }
+    },
+    {
+      "id": "m04",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 3126,
+        "cache_creation_tokens": 9194,
+        "cache_read_tokens": 50929,
+        "total_input": 60133,
+        "cost_usd": 0.073149,
+        "turns": 10,
+        "duration_ms": 20860
+      },
+      "tool_calls": {
+        "Grep": 7,
+        "Read": 2
+      }
+    },
+    {
+      "id": "m04",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 1917,
+        "cache_creation_tokens": 7546,
+        "cache_read_tokens": 39677,
+        "total_input": 47233,
+        "cost_usd": 0.053342,
+        "turns": 7,
+        "duration_ms": 13990
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "m04",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 2588,
+        "cache_creation_tokens": 12100,
+        "cache_read_tokens": 65187,
+        "total_input": 77299,
+        "cost_usd": 0.080823,
+        "turns": 9,
+        "duration_ms": 18983
+      },
+      "tool_calls": {
+        "Read": 4,
+        "mcp__memex__callees": 1,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m04",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 3294,
+        "cache_creation_tokens": 18042,
+        "cache_read_tokens": 91563,
+        "total_input": 109619,
+        "cost_usd": 0.114292,
+        "turns": 14,
+        "duration_ms": 23960
+      },
+      "tool_calls": {
+        "Read": 9,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "m05",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 2646,
+        "cache_creation_tokens": 11274,
+        "cache_read_tokens": 41410,
+        "total_input": 52694,
+        "cost_usd": 0.075717,
+        "turns": 6,
+        "duration_ms": 21472
+      },
+      "tool_calls": {
+        "Grep": 3,
+        "Read": 2
+      }
+    },
+    {
+      "id": "m05",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 16,
+        "output_tokens": 3732,
+        "cache_creation_tokens": 18215,
+        "cache_read_tokens": 102225,
+        "total_input": 120456,
+        "cost_usd": 0.120434,
+        "turns": 11,
+        "duration_ms": 28343
+      },
+      "tool_calls": {
+        "Grep": 7,
+        "Read": 3
+      }
+    },
+    {
+      "id": "m05",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 3236,
+        "cache_creation_tokens": 13242,
+        "cache_read_tokens": 75797,
+        "total_input": 89053,
+        "cost_usd": 0.092936,
+        "turns": 9,
+        "duration_ms": 24020
+      },
+      "tool_calls": {
+        "Grep": 4,
+        "Read": 4
+      }
+    },
+    {
+      "id": "m05",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1209,
+        "cache_creation_tokens": 5287,
+        "cache_read_tokens": 26678,
+        "total_input": 31973,
+        "cost_usd": 0.035922,
+        "turns": 4,
+        "duration_ms": 9383
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 2,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m05",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1072,
+        "cache_creation_tokens": 2871,
+        "cache_read_tokens": 19138,
+        "total_input": 22015,
+        "cost_usd": 0.02413,
+        "turns": 3,
+        "duration_ms": 8324
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m05",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 1093,
+        "cache_creation_tokens": 2162,
+        "cache_read_tokens": 19844,
+        "total_input": 22012,
+        "cost_usd": 0.021574,
+        "turns": 3,
+        "duration_ms": 7924
+      },
+      "tool_calls": {
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m06",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3695,
+        "cache_creation_tokens": 16687,
+        "cache_read_tokens": 67623,
+        "total_input": 84322,
+        "cost_usd": 0.110484,
+        "turns": 14,
+        "duration_ms": 24380
+      },
+      "tool_calls": {
+        "Grep": 8,
+        "Read": 5
+      }
+    },
+    {
+      "id": "m06",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 3849,
+        "cache_creation_tokens": 16997,
+        "cache_read_tokens": 89249,
+        "total_input": 106260,
+        "cost_usd": 0.115431,
+        "turns": 15,
+        "duration_ms": 29012
+      },
+      "tool_calls": {
+        "Grep": 10,
+        "Read": 4
+      }
+    },
+    {
+      "id": "m06",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 16,
+        "output_tokens": 3728,
+        "cache_creation_tokens": 15843,
+        "cache_read_tokens": 106845,
+        "total_input": 122704,
+        "cost_usd": 0.111369,
+        "turns": 15,
+        "duration_ms": 26251
+      },
+      "tool_calls": {
+        "Grep": 9,
+        "Read": 5
+      }
+    },
+    {
+      "id": "m06",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1330,
+        "cache_creation_tokens": 5067,
+        "cache_read_tokens": 26211,
+        "total_input": 31286,
+        "cost_usd": 0.036205,
+        "turns": 5,
+        "duration_ms": 9809
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m06",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1474,
+        "cache_creation_tokens": 3617,
+        "cache_read_tokens": 27686,
+        "total_input": 31311,
+        "cost_usd": 0.031993,
+        "turns": 5,
+        "duration_ms": 11105
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__callers": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m06",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 1587,
+        "cache_creation_tokens": 3458,
+        "cache_read_tokens": 38218,
+        "total_input": 41686,
+        "cost_usd": 0.033544,
+        "turns": 6,
+        "duration_ms": 11886
+      },
+      "tool_calls": {
+        "Read": 2,
+        "mcp__memex__callers": 2,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m07",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9166666666666666,
+        "recall": 1.0,
+        "f1": 0.9565217391304348
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9166666666666666,
+        "recall": 1.0,
+        "f1": 0.9565217391304348
+      },
+      "missed": [],
+      "extra": [
+        "tests.unit_tests.services_tests.backup_v2_tests.test_backup_v2._d7c6efd2de42_migrate_favorites_and_ratings_to_user_ratings"
+      ],
+      "usage": {
+        "input_tokens": 14,
+        "output_tokens": 3467,
+        "cache_creation_tokens": 11914,
+        "cache_read_tokens": 81949,
+        "total_input": 93877,
+        "cost_usd": 0.090549,
+        "turns": 14,
+        "duration_ms": 25126
+      },
+      "tool_calls": {
+        "Grep": 6,
+        "Read": 7
+      }
+    },
+    {
+      "id": "m07",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9166666666666666,
+        "recall": 1.0,
+        "f1": 0.9565217391304348
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9166666666666666,
+        "recall": 1.0,
+        "f1": 0.9565217391304348
+      },
+      "missed": [],
+      "extra": [
+        "tests.unit_tests.services_tests.backup_v2_tests.test_backup_v2._d7c6efd2de42_migrate_favorites_and_ratings_to_user_ratings"
+      ],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 2794,
+        "cache_creation_tokens": 9671,
+        "cache_read_tokens": 52128,
+        "total_input": 61809,
+        "cost_usd": 0.071857,
+        "turns": 11,
+        "duration_ms": 18726
+      },
+      "tool_calls": {
+        "Grep": 4,
+        "Read": 6
+      }
+    },
+    {
+      "id": "m07",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 0.9166666666666666,
+        "recall": 1.0,
+        "f1": 0.9565217391304348
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 0.9166666666666666,
+        "recall": 1.0,
+        "f1": 0.9565217391304348
+      },
+      "missed": [],
+      "extra": [
+        "tests.unit_tests.services_tests.backup_v2_tests.test_backup_v2._d7c6efd2de42_migrate_favorites_and_ratings_to_user_ratings"
+      ],
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 2992,
+        "cache_creation_tokens": 9998,
+        "cache_read_tokens": 52179,
+        "total_input": 62187,
+        "cost_usd": 0.07515,
+        "turns": 12,
+        "duration_ms": 19396
+      },
+      "tool_calls": {
+        "Grep": 5,
+        "Read": 6
+      }
+    },
+    {
+      "id": "m07",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 2846,
+        "cache_creation_tokens": 17885,
+        "cache_read_tokens": 57409,
+        "total_input": 75306,
+        "cost_usd": 0.105765,
+        "turns": 14,
+        "duration_ms": 19049
+      },
+      "tool_calls": {
+        "Read": 8,
+        "mcp__memex__callees": 1,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "m07",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 2889,
+        "cache_creation_tokens": 13584,
+        "cache_read_tokens": 54896,
+        "total_input": 68492,
+        "cost_usd": 0.08874,
+        "turns": 13,
+        "duration_ms": 21005
+      },
+      "tool_calls": {
+        "Read": 8,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "m07",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 12,
+        "output_tokens": 3009,
+        "cache_creation_tokens": 13516,
+        "cache_read_tokens": 58390,
+        "total_input": 71918,
+        "cost_usd": 0.090017,
+        "turns": 14,
+        "duration_ms": 20359
+      },
+      "tool_calls": {
+        "Read": 8,
+        "mcp__memex__callers": 1,
+        "mcp__memex__find_symbol": 1,
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1,
+        "mcp__memex__search_docs": 1
+      }
+    },
+    {
+      "id": "m08",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1220,
+        "cache_creation_tokens": 3980,
+        "cache_read_tokens": 25014,
+        "total_input": 29002,
+        "cost_usd": 0.030637,
+        "turns": 4,
+        "duration_ms": 9565
+      },
+      "tool_calls": {
+        "Grep": 3
+      }
+    },
+    {
+      "id": "m08",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1298,
+        "cache_creation_tokens": 3177,
+        "cache_read_tokens": 26872,
+        "total_input": 30057,
+        "cost_usd": 0.028391,
+        "turns": 5,
+        "duration_ms": 10084
+      },
+      "tool_calls": {
+        "Grep": 4
+      }
+    },
+    {
+      "id": "m08",
+      "category": "multi_hop",
+      "condition": "A",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 8,
+        "output_tokens": 1437,
+        "cache_creation_tokens": 2445,
+        "cache_read_tokens": 26250,
+        "total_input": 28703,
+        "cost_usd": 0.026791,
+        "turns": 5,
+        "duration_ms": 11408
+      },
+      "tool_calls": {
+        "Grep": 4
+      }
+    },
+    {
+      "id": "m08",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 1,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 795,
+        "cache_creation_tokens": 5379,
+        "cache_read_tokens": 17574,
+        "total_input": 22959,
+        "cost_usd": 0.031235,
+        "turns": 3,
+        "duration_ms": 6473
+      },
+      "tool_calls": {
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m08",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 2,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 775,
+        "cache_creation_tokens": 3955,
+        "cache_read_tokens": 19000,
+        "total_input": 22961,
+        "cost_usd": 0.025482,
+        "turns": 3,
+        "duration_ms": 7024
+      },
+      "tool_calls": {
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    },
+    {
+      "id": "m08",
+      "category": "multi_hop",
+      "condition": "B",
+      "run": 3,
+      "error": false,
+      "problem": null,
+      "bad_lines": 0,
+      "estimated_usage": false,
+      "answered": true,
+      "symbols": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "docs": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "combined": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "missed": [],
+      "extra": [],
+      "usage": {
+        "input_tokens": 6,
+        "output_tokens": 744,
+        "cache_creation_tokens": 3253,
+        "cache_read_tokens": 19706,
+        "total_input": 22965,
+        "cost_usd": 0.022435,
+        "turns": 3,
+        "duration_ms": 5886
+      },
+      "tool_calls": {
+        "mcp__memex__impact_of": 1,
+        "mcp__memex__list_codebases": 1
+      }
+    }
+  ]
+}

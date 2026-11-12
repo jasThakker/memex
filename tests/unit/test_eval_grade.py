@@ -344,6 +344,18 @@ def test_grade_run_writes_the_same_scores_twice_and_reports_each_question(tmp_pa
     assert "+8,000 input tokens" in report
 
 
+def test_grade_run_reads_transcripts_of_any_question_id_prefix(tmp_path: Path) -> None:
+    question = {**QUESTION, "id": "m01"}
+    (tmp_path / "meta.json").write_text(json.dumps({"name": "t", "root": ROOT}))
+    (tmp_path / "m01-A-1.jsonl").write_text("\n".join(lines(INIT_A, RESULT)))
+    questions_file = tmp_path / "questions.yaml"
+    questions_file.write_text(json.dumps([question]))
+
+    scores = grade_run(tmp_path, load_questions(questions_file))
+
+    assert [row["question"]["id"] for row in scores["rows"]] == ["m01"]
+
+
 def test_grade_run_names_a_question_missing_from_the_yaml(tmp_path: Path) -> None:
     (tmp_path / "meta.json").write_text(json.dumps({"name": "t", "root": ROOT}))
     (tmp_path / "q77-A-1.jsonl").write_text("\n".join(lines(INIT_A, RESULT)))

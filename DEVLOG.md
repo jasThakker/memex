@@ -734,3 +734,34 @@ Two questions at N=1 show the workflow is no worse; they do not show it is bette
 **Numbers:** 26 calls (24 questions, 2 baselines), about $1.4. No code changes.
 
 **Next:** a multi-hop impact eval from the hand-verified sets in `eval/impact_check.md`, with N=3 in both conditions; doc-question recall.
+
+## Phase 13: Multi-hop eval (2026-11-11)
+
+**Goal:** Phase 12 asked only mostly one-hop questions. Measure the kind of question Memex is built for: who depends on a symbol across several steps of calls, uses and inheritance. The questions were written to favor Memex, so the guard against picking the flattering ones afterwards is that they were fixed before anything ran and every result is reported.
+
+**Setup:**
+- 8 questions in `eval/questions_multihop.yaml` (category `multi_hop`): transitive callers (m01, m02, m05, m06), `Depends(...)` chains (m03), model uses (m04, m07) and a control question on plain inheritance (m08). The expected answers were built by an agent from `ast` scripts, grep and reading the code, then spot-checked; they are not hand-verified like `eval/impact_check.md`.
+- The file was frozen before the first run: `eval/results/multihop/FROZEN.txt` records its sha256 (`215248db...612f1`), which still matches.
+- N=3 per question and condition. Same harness, model (`claude-sonnet-5-5`), effort (`high`) and prompt as Phase 12, on Memex `5396db9`. `eval/config_multihop.toml` sets the runs; `eval/run_multihop.py` points `run.py` at the new files, since `questions.yaml` stays at its 12 questions.
+- Grader fix: `TRANSCRIPT_NAME` in `eval/grade.py` only accepted `q` ids, so `m01` transcripts were silently skipped. It now accepts any one-letter prefix, with a unit test. The run was re-graded from the repo with `uv run python eval/grade.py eval/results/multihop --questions eval/questions_multihop.yaml`.
+
+**Results** (48 runs, none invalid, none errored):
+
+| Condition | P | R | F1 | Input tokens (all) | Output | Turns | Cost | Time |
+|---|---|---|---|---|---|---|---|---|
+| A: Read, Grep, Glob | 0.97 | 1.00 | 0.98 | 1,997,618 | 79,122 | 269 | $2.36 | 609 s |
+| B: Memex plus Read | 0.99 | 0.99 | 0.99 | 1,224,248 | 44,345 | 164 | $1.38 | 330 s |
+
+Per question, mean F1 A / B and mean input tokens A / B: m01 1.00 / 0.96, 87k / 21k; m02 0.98 / 1.00, 132k / 118k; m03 0.93 / 0.96, 90k / 34k; m04 0.98 / 1.00, 61k / 78k; m05 1.00 / 1.00, 87k / 25k; m06 1.00 / 1.00, 104k / 34k; m07 0.96 / 1.00, 72k / 71k; m08 1.00 / 1.00, 29k / 22k.
+
+- **Accuracy is a tie.** File search found nearly every dependent too. Its losses were slips: test functions listed as dependents (m03 run 1, m07), a misspelled class (m04 run 1), one wrong method (m02 run 1).
+- **Cost is not.** B used 39% fewer input tokens and 39% fewer turns, cost 41% less and took 46% less time. The gap is widest where a method name is shared by several classes (m05, m06: 3 to 3.5 times fewer tokens) and on m01 and m03, where B answered with a single Memex query.
+- **B's one real miss** is the known local-variable gap: all 3 runs of m01 missed `forgot_password.reset_password`, which calls through `f_service = PasswordResetService(...)`.
+- **B's one extra**, `routes.spa.mount_spa` on m03, is borderline: it reaches `get_auth_token` through a function it registers, which the question's rules do not count.
+- **B spent more on m04** (78k against 61k): some runs read files after `impact_of` to confirm `relationship()` strings.
+
+**Reading the result:** on multi-hop questions, on a 415-file repo, a careful model with file search reaches the same answers; Memex gets there for about 60% of the cost in about half the time. The gain at this size is efficiency, not accuracy. Larger repos are not measured.
+
+**Numbers:** 50 calls (48 questions, 2 baselines), about $3.75. Code change: the grader regex and its test.
+
+**Next:** hand-verify the multi-hop answers; type local variables from constructor calls (`x = Foo(...)`), which would fix m01.
