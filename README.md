@@ -30,29 +30,6 @@ uv run python demo/server.py                   # then open http://127.0.0.1:8765
 
 An interactive map of an indexed codebase: every module, class, function and doc section as a node, grouped by layer, with edge types you can switch on and off. Hover to see a node's neighbours, click to inspect it, drag to pin it, press `/` to search, and use **Trace impact** to light up everything that depends on it within three hops. The chat at the bottom sends a question to headless Claude Code (`claude -p`) with only the Memex tools. It shows each tool call as it happens and highlights the symbols the answer names. The chat needs the `claude` CLI logged in; a question takes a few seconds and costs a few cents. The page loads fonts and two small libraries from public CDNs.
 
-## Evaluation
-
-Twelve questions about Mealie with hand-verified answers (`eval/questions.yaml`), each asked in two conditions with the same model and prompt: **A** with `Read`, `Grep` and `Glob`, **B** with the Memex tools and `Read`. Details: DESIGN.md section 14.
-
-```sh
-uv run memex index mealie                      # needs vendor/ and Neo4j
-uv run python eval/run.py --name <run> --baseline
-uv run python eval/grade.py eval/results/<run>
-```
-
-Results of the committed run (`eval/results/full/results.md`; `claude-sonnet-5-5`, effort high, one run per condition):
-
-| Condition | F1 | Precision | Recall | Input tokens | Cost | Time |
-|---|---|---|---|---|---|---|
-| A: file search | 0.68 | 0.64 | 0.79 | 502k | $0.71 | 177 s |
-| B: Memex | 0.60 | 0.54 | 0.76 | 701k | $0.80 | 180 s |
-
-- On these mostly one-hop questions, Memex found about as much as file search (recall 0.76 vs 0.79), with more extra items, in the same time, at 13% more cost.
-- It did best on callers and dependents.
-- It lost most on the doc questions, and on a call graph that misses calls through injected attributes, which sent the agent back to reading files.
-
-DEVLOG.md (Phase 7) has the per-question analysis. Phase 9 then checked `impact_of` by hand on four Mealie symbols (`eval/impact_check.md`): precision was 1.00 and recall was the gap, which three fixes closed (for example, direct dependents of `get_current_user` went from 5 of 10 to 10 of 10). The eval above was not re-run after those fixes.
-
 ## Tests
 
 ```sh
