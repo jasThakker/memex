@@ -707,3 +707,30 @@ Two questions at N=1 show the workflow is no worse; they do not show it is bette
 - README: the Evaluation section removed; the eval is described in DESIGN section 14 and DEVLOG Phases 7, 9 and 10.
 
 **Next:** none planned.
+
+## Phase 12: Eval re-run on the current Memex (2026-11-11)
+
+**Goal:** The Phase 7 A/B eval ran on commit `7589ac1`, before the Phase 9 fixes and with `check_change` still a tool. Re-run all 12 questions on the current Memex (`6f126ed`) so the reported numbers match the code. Same harness, model (`claude-sonnet-5-5`), effort (`high`) and prompt; Claude Code 2.1.322 (Phase 7: 2.1.319). N=1. Results in `eval/results/phase12-full`.
+
+**Results:**
+
+| Condition | P | R | F1 | Input tokens (all) | Turns | Cost | Time |
+|---|---|---|---|---|---|---|---|
+| A: Read, Grep, Glob | 0.59 | 0.82 | 0.66 | 576,299 | 88 | $0.76 | 185 s |
+| B: Memex plus Read | 0.56 | 0.76 | 0.60 | 500,481 | 79 | $0.65 | 141 s |
+| Phase 7 A | 0.64 | 0.79 | 0.68 | 501,869 | 80 | $0.71 | 177 s |
+| Phase 7 B | 0.54 | 0.76 | 0.60 | 701,473 | 97 | $0.80 | 180 s |
+
+- **Cost and speed reversed:** B now uses 13% fewer input tokens than A, 10% fewer turns, costs 14% less and is 24% faster. In Phase 7 it cost 13% more.
+- **Accuracy unchanged:** B's F1 is 0.60 again, against 0.66 for A; recall 0.76 against 0.82.
+- **Per question:** B won 3 on F1 (q01, q10, q12), A won 6 (q02, q03, q05, q08, q09, q11), 3 tied (q04, q06, q07).
+- **q04**, the Phase 7 outlier: B went from 160k to 21k input tokens at F1 1.00. `callers` now finds all 7 callers through typed attributes (Phase 9), so the agent no longer reads a large file to close the gap.
+- **Fixed cost:** B's prompt is 113 input tokens larger per request than A's (Phase 7: 465). Removing `check_change` (Phase 10) cut it by three quarters.
+- **Where B still loses:** the doc questions (doc_rules F1 0.63 against 0.75; q09 missed `AGENTS.md#Common Gotchas`) and q08 (0.26 against 0.44).
+- **Run-to-run noise is visible in A alone:** with the same questions and tools, A's q10 went from 0.83 to 0.50 and its q04 tokens from 32k to 67k. Differences of this size between conditions are within what N=1 can show.
+
+**Reading the result:** on these mostly one-hop questions, the current Memex finds about as much as file search and is cheaper and faster. It is not more accurate, and it is weakest on doc questions. Multi-hop impact questions are still not in the set.
+
+**Numbers:** 26 calls (24 questions, 2 baselines), about $1.4. No code changes.
+
+**Next:** a multi-hop impact eval from the hand-verified sets in `eval/impact_check.md`, with N=3 in both conditions; doc-question recall.
