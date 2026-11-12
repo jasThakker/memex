@@ -704,6 +704,6 @@ Two questions at N=1 show the workflow is no worse; they do not show it is bette
 - DESIGN.md: the resolver also produces USES (section 3 diagram); `module_summary` is a stretch item whose result model exists but whose tool was never built (section 10); `demo/` and `eval/impact_check.md` in the folder layout (section 11); unit tests take about 3 s (section 12); one line on how Phases 8 to 11 differ from the build plan (section 15).
 - ADR-001: status notes the amendments by ADR-003 and ADR-004. ADR-003: dated 2026-11-05, the day Phase 9 ran, and notes that `check_change` was later removed.
 - DEVLOG Phase 8: the demo server has two read queries of its own, not one.
-- README: the Phase 9 accuracy check and its fixes, and that the Phase 7 eval was not re-run after them.
+- README: the Evaluation section removed; the eval is described in DESIGN section 14 and DEVLOG Phases 7, 9 and 10.
 
 **Next:** none planned.
