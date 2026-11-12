@@ -1,7 +1,7 @@
 # ADR-003: USES, an edge for code named as a value
 
 - Status: accepted
-- Date: 2026-11-06 (Phase 9)
+- Date: 2026-11-05 (Phase 9)
 
 ## Context
 
@@ -30,7 +30,7 @@ Add one edge type, `USES`, from a Function or Class to a Function or Class, with
   - a function's body (nested defs and lambdas included, as for calls) and its own parameter defaults;
   - a class body's statements other than nested defs and classes (assigned values, not annotations), with the class as the source.
 - **One edge per pair:** the first line.
-- **In the tools:** `impact_of` and `check_change` walk USES like CALLS: a dependent reached by USES is expanded. `callers` and `callees` do not use it; they stay about calls. `PathStep.edge` gains the value `USES`.
+- **In the tools:** `impact_of` and `check_change` (since removed by ADR-004) walk USES like CALLS: a dependent reached by USES is expanded. `callers` and `callees` do not use it; they stay about calls. `PathStep.edge` gains the value `USES`.
 
 ## Consequences
 

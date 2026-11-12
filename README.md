@@ -51,7 +51,7 @@ Results of the committed run (`eval/results/full/results.md`; `claude-sonnet-5-5
 - It did best on callers and dependents.
 - It lost most on the doc questions, and on a call graph that misses calls through injected attributes, which sent the agent back to reading files.
 
-DEVLOG.md (Phase 7) has the per-question analysis.
+DEVLOG.md (Phase 7) has the per-question analysis. Phase 9 then checked `impact_of` by hand on four Mealie symbols (`eval/impact_check.md`): precision was 1.00 and recall was the gap, which three fixes closed (for example, direct dependents of `get_current_user` went from 5 of 10 to 10 of 10). The eval above was not re-run after those fixes.
 
 ## Tests
 
