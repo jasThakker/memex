@@ -647,7 +647,7 @@ Not fixed by design: calls and values through local variables (`forgot_password.
 - Phase 9 was closed and merged first.
 
 **Built** (`demo/server.py`, `demo/index.html`, README "Demo UI"):
-- A standard-library HTTP server outside the `memex` package: graph export (one read query of its own), `impact_of` and `list_codebases` through `memex.query`, and `/api/chat`, which streams the tool calls and the answer from `claude -p` as NDJSON. The child `claude` runs in an empty temp folder with the calling session's environment variables removed.
+- A standard-library HTTP server outside the `memex` package: graph export (two read queries of its own, for nodes and for edges), `impact_of` and `list_codebases` through `memex.query`, and `/api/chat`, which streams the tool calls and the answer from `claude -p` as NDJSON. The child `claude` runs in an empty temp folder with the calling session's environment variables removed.
 - One HTML page using `force-graph`, `marked` and `DOMPurify` from a CDN:
   - nodes coloured by layer and drawn by kind; edge types can be toggled (imports off by default);
   - hover, click to inspect, drag to pin, `/` to search;
@@ -692,3 +692,18 @@ The demo has no automated tests.
 Two questions at N=1 show the workflow is no worse; they do not show it is better.
 
 **Next:** none planned. A full eval run would confirm the change questions at N greater than 1; an MCP prompt is the fallback if agents compose the tools poorly.
+
+## Phase 11: Docs consistency (2026-11-11)
+
+**Goal:** Make every tracked doc agree with the code as built, before the interview walkthrough. No code changes. Built on `phase-11-doc-consistency` from `main`.
+
+**Checked against the code and a fresh Mealie index:** 415 files, 3,442 code and doc nodes, 11,712 edges (CALLS 1,934, USES 1,783), 2,993 unresolved calls; `impact_of get_current_user` gives 10, 70, 106, 111 and 111 dependents at depths 1 to 5, 8 shown, 3,258 B; the first doc section of `impact_of AppSettings` and the first `search_docs` hit for "AppSettings" are AGENTS.md "Python Backend" (lines 98 to 126). Tests: 393 unit (about 3 s), 142 Neo4j (about 27 s), 42 real-repo, all green; ruff clean.
+
+**Fixed:**
+- CLAUDE.md and `docs/workflow.md`: the reviewer also ran in Phase 9.
+- DESIGN.md: the resolver also produces USES (section 3 diagram); `module_summary` is a stretch item whose result model exists but whose tool was never built (section 10); `demo/` and `eval/impact_check.md` in the folder layout (section 11); unit tests take about 3 s (section 12); one line on how Phases 8 to 11 differ from the build plan (section 15).
+- ADR-001: status notes the amendments by ADR-003 and ADR-004. ADR-003: dated 2026-11-05, the day Phase 9 ran, and notes that `check_change` was later removed.
+- DEVLOG Phase 8: the demo server has two read queries of its own, not one.
+- README: the Phase 9 accuracy check and its fixes, and that the Phase 7 eval was not re-run after them.
+
+**Next:** none planned.

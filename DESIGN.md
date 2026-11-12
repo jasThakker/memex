@@ -42,7 +42,7 @@ flowchart LR
   end
   subgraph Ingest["memex.ingest (no DB)"]
     W["walker<br/>include/exclude globs"] --> P["parser<br/>ast -> nodes + raw refs"]
-    P --> R["resolver<br/>CALLS, IMPORTS, INHERITS"]
+    P --> R["resolver<br/>CALLS, IMPORTS, INHERITS, USES"]
     P --> SA["extractors (opt-in per codebase)<br/>v1: sqlalchemy"]
     R --> CL["classifier<br/>layer + domain"]
     SA --> CL
@@ -289,7 +289,7 @@ search_docs(codebase: str, query: str, limit: int = 5) -> DocSearch
     # whole-word match, mentioned symbols; the query is plain text (Lucene
     # syntax is escaped), at most 500 characters
 
-module_summary(codebase: str, module: str) -> ModuleSummary    # stretch
+module_summary(codebase: str, module: str) -> ModuleSummary    # stretch, not built: only its result model exists
     # layer, domain, docstring, classes (bases, method names),
     # functions (signatures), internal imports, imported_by count, docs
 ```
@@ -319,7 +319,8 @@ memex/
 scripts/fetch_codebases.py     # clones each external codebase in memex.toml at its ref, verifies commit
 scripts/render_docs.py         # HTML views of the Markdown docs
 docs/decisions/                # ADRs, ingested as Doc nodes
-eval/questions.yaml config.toml run.py grade.py results/
+eval/questions.yaml config.toml run.py grade.py results/ impact_check.md
+demo/server.py index.html       # demo UI: graph map and chat, outside the package
 tests/fixtures/layered_app/    # generic layered web app: routes, services, repos, ORM models, schemas
 tests/fixtures/plainrepo/      # two packages, no rules, no extractors
 tests/fixtures/docs/
@@ -337,7 +338,7 @@ Dependencies: `neo4j`, `fastmcp`, `pydantic`. Dev: `pytest`, `ruff`, `testcontai
 - **`plainrepo` fixture for generality.** Two packages, no rules, no extractors. Tests assert the default layer and domain behavior, and that no REFERENCES edges exist without an extractor enabled. The classifier is tested with and without rules on the same paths.
 - **Doc fixtures.** `tests/fixtures/docs/` holds chunker edge cases with known chunks and line ranges. The `layered_app` docs (an AGENTS.md, a guide and an ADR, each with its own kind) mention its symbols by qualname, path and backticks, next to near-misses that must not link: an ambiguous or common name, a glob, an excluded path, an unknown qualname. `plainrepo` has a README with no `doc_kinds`.
 - **Guardrail test** (default run): scans every file in the `memex/` package and fails if the name of any external codebase in `memex.toml` (one with a `source`, so `mealie` and `httpx` but not `memex`) appears in it, case-insensitive, including comments and docstrings.
-- **Unit tests** (no DB, default run, about 2 seconds; the fetch-script tests use real git and take most of it): parser, resolver, extractors, classifier, chunker, mention linker, store rows, CLI.
+- **Unit tests** (no DB, default run, about 3 seconds; the fetch-script tests use real git and take most of it): parser, resolver, extractors, classifier, chunker, mention linker, store rows, CLI.
 - **Integration tests** (`-m neo4j`): store round-trip (Doc nodes and MENTIONS included, plus the `doc_text` full-text index) and every `memex.query` function against a session-scoped Neo4j testcontainer, so tests never touch the dev database (Neo4j Community has one user database).
 - **MCP contract tests** (`-m neo4j`): the FastMCP in-memory client calls each tool and checks the tool list, read-only annotations, output schemas against the contract models, default limits, that each tool returns exactly what its query function returns, codebase validation, argument errors, ambiguous-name handling, that nothing writes, and a size budget (the JSON text sent to the agent under 4 KB at default limits).
 - **Real-repo smoke tests** (`-m realrepo`, opt-in, need `vendor/` fetched). One test file per benchmark repo; the assertions are about that repo, the code under test is not.
@@ -423,3 +424,5 @@ Estimates include review time and assume phases run one after another.
 | 8. Polish (stretch) | 0.5 h | README walkthrough, demo script, interview notes. | A fresh clone reaches a working MCP server by following the README. |
 | 9. Stretch items | 0.5 h+ | Any of: `module_summary`, `ambiguous` call tier, eval with N=3, Django extractor fixture test. | Each item ships with its own tests. |
 | **Total** | **~15.5 h** | The generality work (second repo, guardrail) added about 0.5 h. | |
+
+As built (DEVLOG.md): Phase 8 became the demo UI, Phase 9 a hand-verified accuracy check of `impact_of` with three fixes (ADR-003), Phase 10 removed `check_change` (ADR-004), and Phase 11 made the docs consistent with the code.

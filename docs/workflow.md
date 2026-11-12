@@ -44,7 +44,7 @@ Subagents are invoked deliberately by the user, never by automatic delegation. C
 
 | Agent | Type | When |
 |---|---|---|
-| `reviewer` | Custom, no edit tools | After core-logic slices, and once at the end of each phase that has them (Phases 2 to 7; not Phase 1) |
+| `reviewer` | Custom, no edit tools | After core-logic slices, and once at the end of each phase that has them (Phases 2 to 7 and 9; not Phase 1) |
 | Explore | Built-in | Phase 1: map Mealie and draft eval questions |
 
 Invoke with `@agent-reviewer ...` or "Use the reviewer subagent to ...".

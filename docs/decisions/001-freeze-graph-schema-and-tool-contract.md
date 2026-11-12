@@ -1,6 +1,6 @@
 # ADR-001: Freeze the graph schema and the tool contract
 
-- Status: accepted
+- Status: accepted; amended by ADR-003 (the USES edge kind) and ADR-004 (the `check_change` models removed)
 - Date: 2026-11-05 (end of Phase 3)
 
 ## Context
