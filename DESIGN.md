@@ -320,6 +320,7 @@ scripts/fetch_codebases.py     # clones each external codebase in memex.toml at 
 scripts/render_docs.py         # HTML views of the Markdown docs
 docs/decisions/                # ADRs, ingested as Doc nodes
 eval/questions.yaml config.toml run.py grade.py results/ impact_check.md
+eval/questions_multihop.yaml config_multihop.toml run_multihop.py  # multi-hop set (Phase 13)
 demo/server.py index.html       # demo UI: graph map and chat, outside the package
 tests/fixtures/layered_app/    # generic layered web app: routes, services, repos, ORM models, schemas
 tests/fixtures/plainrepo/      # two packages, no rules, no extractors
